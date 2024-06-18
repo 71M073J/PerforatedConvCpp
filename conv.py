@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import perfconv
 from torch.utils.cpp_extension import load
-
+import traceback #TODO remove when no more bugs...
 class DeviceError(Exception):
     pass
 # perfconv_cpu = load('perfconv_cpu', sources=['perfconv_cpu.cpp'], verbose=True)
@@ -14,11 +14,15 @@ class ConvFunction(torch.autograd.Function):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward = params
 
         kW, kH = weights.shape[2], weights.shape[3]
-
-        outputs = \
-            perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                                     is_bias, device, dil1, dil2, groups, upscale_conv)[0]
-
+        try:
+            outputs = \
+                perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+                                         is_bias, device, dil1, dil2, groups, upscale_conv)[0]
+        except Exception:
+            print(traceback.format_exc())
+            print(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+                                         is_bias, device, dil1, dil2, groups, upscale_conv)
+            quit()
         ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward)
         variables = [input, weights, bias]
         ctx.save_for_backward(*variables)
