@@ -44,7 +44,7 @@ class ConvFunction(torch.autograd.Function):
 
 class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1,1), padding=(0,0),
-                 stride=1, dilation=1, groups=1, is_bias=True, device=None,
+                 stride=1, dilation=1, groups=1, bias=True, device=None,
                  silent=False, perf_stride=(1,1), upscale_conv=False, strided_backward=False):
         super(PerforatedConv2d, self).__init__()
         if device is None:
@@ -78,7 +78,6 @@ class PerforatedConv2d(nn.Module):
             self.stride = stride
         else:
             raise TypeError(f"Incorrect stride type: {type(stride)}, with data: {stride}")
-        self.is_bias = is_bias
         if type(perf_stride) == int:
             self.perf_stride = (perf_stride, perf_stride)
         elif type(perf_stride) == tuple:
@@ -91,7 +90,11 @@ class PerforatedConv2d(nn.Module):
         self.strided_backward = strided_backward
 
         self.weight = nn.Parameter(torch.empty(out_channels, in_channels, self.kernel_size[0], self.kernel_size[1], device=self.device))
-        self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+        self.is_bias = bias
+        if self.is_bias:
+            self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+        else:
+            self.bias = None
         self._initialize_weights()
         if not silent:
             print("put logic for deciding whether to use torch impl or not and which perf stride into c++?")
