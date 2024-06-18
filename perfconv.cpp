@@ -32,7 +32,7 @@ torch::Tensor get_lin_kernel(int64_t w, int64_t h, bool normalised, at::TensorOp
 
 std::vector<torch::Tensor> conv_forward(torch::Tensor input,
                                    torch::Tensor weights,
-                                   torch::Tensor bias,
+                                   const ::std::optional<at::Tensor> bias,
                                    int64_t kW, int64_t kH,
                                    int64_t dW, int64_t dH, /*stride values*/
                                    int64_t dWp, int64_t dHp, /*perf stride values*/
@@ -268,8 +268,11 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                 torch::IntArrayRef({padW, padH}),
                                 torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
                                 torch::IntArrayRef({0, 0}) /*out padding?*/, groups, output_mask);
-
-        return {std::get<0>(backTest),std::get<1>(backTest),std::get<2>(backTest)};
+        if (is_bias){
+            return {std::get<0>(backTest),std::get<1>(backTest),std::get<2>(backTest)};
+        }else{
+            return {std::get<0>(backTest),std::get<1>(backTest),{}};
+        }
     }else{
         //std::cerr << gradOutput << std::endl;
         //std::cerr << input << std::endl;
@@ -282,8 +285,11 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                 torch::IntArrayRef({padW, padH}),
                                 torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
                                 torch::IntArrayRef({0, 0}) /*out padding?*/, groups, output_mask);
-
-        return {std::get<0>(backTest),std::get<1>(backTest),std::get<2>(backTest)};
+        if (is_bias){
+            return {std::get<0>(backTest),std::get<1>(backTest),std::get<2>(backTest)};
+        }else{
+            return {std::get<0>(backTest),std::get<1>(backTest),{}};
+        }
     }
 
     /*std::cerr << stride << std::endl;

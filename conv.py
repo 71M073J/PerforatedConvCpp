@@ -14,7 +14,8 @@ class ConvFunction(torch.autograd.Function):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward = params
 
         kW, kH = weights.shape[2], weights.shape[3]
-
+        print(kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+                                     is_bias, device, dil1, dil2, groups, upscale_conv)
         outputs = \
             perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                                      is_bias, device, dil1, dil2, groups, upscale_conv)[0]
