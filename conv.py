@@ -45,7 +45,7 @@ class ConvFunction(torch.autograd.Function):
 class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1,1), padding=(0,0),
                  stride=1, dilation=1, groups=1, bias=True, device=None,
-                 silent=False, perf_stride=(1,1), upscale_conv=False, strided_backward=False):
+                 silent=False, perf_stride=(1,1), upscale_conv=False, strided_backward=False, perforation_mode=None):
         super(PerforatedConv2d, self).__init__()
         if device is None:
             self.device = torch.device("cpu")
@@ -78,6 +78,11 @@ class PerforatedConv2d(nn.Module):
             self.stride = stride
         else:
             raise TypeError(f"Incorrect stride type: {type(stride)}, with data: {stride}")
+        if perf_stride is None:
+            if perforation_mode is not None:
+                perf_stride = perforation_mode
+            else:
+                perf_stride = (2, 2)
         if type(perf_stride) == int:
             self.perf_stride = (perf_stride, perf_stride)
         elif type(perf_stride) == tuple:
