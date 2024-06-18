@@ -14,8 +14,7 @@ class ConvFunction(torch.autograd.Function):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward = params
 
         kW, kH = weights.shape[2], weights.shape[3]
-        print(kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                                     is_bias, device, dil1, dil2, groups, upscale_conv)
+
         outputs = \
             perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                                      is_bias, device, dil1, dil2, groups, upscale_conv)[0]
@@ -46,7 +45,7 @@ class ConvFunction(torch.autograd.Function):
 class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1,1), padding=(0,0),
                  stride=1, dilation=1, groups=1, bias=True, device=None,
-                 silent=False, perf_stride=(1,1), upscale_conv=False, strided_backward=False, perforation_mode=None, grad_conv=None):
+                 perf_stride=(1,1), upscale_conv=False, strided_backward=False, perforation_mode=None, grad_conv=None):
         super(PerforatedConv2d, self).__init__()
         if device is None:
             self.device = torch.device("cpu")
@@ -102,8 +101,6 @@ class PerforatedConv2d(nn.Module):
         else:
             self.bias = None
         self._initialize_weights()
-        if not silent:
-            print("put logic for deciding whether to use torch impl or not and which perf stride into c++?")
 
         self.out_x = 0
         self.out_y = 0
