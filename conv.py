@@ -20,7 +20,7 @@ class ConvFunction(torch.autograd.Function):
                                          is_bias, device, dil1, dil2, groups, upscale_conv)[0]
         except Exception:
             print(traceback.format_exc())
-            print(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+            print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                                          is_bias, device, dil1, dil2, groups, upscale_conv)
             quit()
         ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward)
@@ -190,3 +190,8 @@ class PerforatedConv2d(nn.Module):
         else:
             #print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+
+if __name__ == "__main__":
+    p = PerforatedConv2d
+    c = p(64, 128, 3, perf_stride=2)
+    h = c(torch.ones((2, 64, 10, 10)))

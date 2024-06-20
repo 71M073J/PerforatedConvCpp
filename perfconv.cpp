@@ -53,7 +53,7 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
 
     int64_t outW = int((inputWidth - ((kW - 1) * dilW) + 2 * padW - 1)  / dW) + 1;
     int64_t outH = int((inputHeight - ((kH - 1) * dilH) + 2 * padH - 1)  / dH) + 1;
-
+    //std::cerr << "before downsampling\n";
     //TODO
     if ((kW == 1 && kH == 1) || (dWp < 2 && dHp < 2)){
     //std::cerr << "using torch impl\n";
@@ -64,13 +64,14 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //kernel size is more than 1 since 1 has no improvement over normal conv
     dW = dW * dWp;
     dH = dH * dHp;
-
+    //std::cerr << dW << dH << "\n";
     //std::cerr << input << std::endl;
+    //std::cerr << "using manual conv w downscaling\n";
     //auto t1 = high_resolution_clock::now();//TODO we don't need to save to variable, can just use directly?= speedup maybe
     torch::Tensor output = at::convolution(input, weights, bias, torch::IntArrayRef({dW, dH}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
                                     torch::IntArrayRef({0, 0}) /*out padding?*/, groups);
-
+    //std::cerr << "after conv\n";
     //TODO test transpose convolution---------------------------------------------------------------------------------
     //std::cerr << dW<<dH<<padW<<padH<<std::endl;
     //std::cerr << "done with reduce"<<std::endl;
@@ -123,9 +124,10 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
 
     }
 
+    //std::cerr << "after if\n";
     //torch::Tensor out = torch::empty(torch::IntArrayRef({batch_size, nInputPlane, outH, outW}), options);
-    torch::Tensor out = torch::zeros(torch::IntArrayRef({batch_size, nInputPlane, outW, outH}), options);
-
+    torch::Tensor out = torch::zeros(torch::IntArrayRef({batch_size, weights.size(0), outW, outH}), options);
+    //std::cerr << "after init out\n";
     //base output
     out.index_put_({torch::indexing::Slice(0, torch::indexing::None, 1),
                 torch::indexing::Slice(0, torch::indexing::None, 1),
@@ -248,14 +250,14 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
     CHECK_INPUT(input);
 */
 
-    int64_t batch_size = input.size(0);
-    int64_t nInputPlane = input.size(1);
-    int64_t inputHeight = input.size(2);
-    int64_t inputWidth = input.size(3);
+    //int64_t batch_size = input.size(0);
+    //int64_t nInputPlane = input.size(1);
+    //int64_t inputHeight = input.size(2);
+    //int64_t inputWidth = input.size(3);
 
     int64_t nOutputPlane = gradOutput.size(1);
-    int64_t outputHeight = gradOutput.size(2);
-    int64_t outputWidth = gradOutput.size(3);
+    //int64_t outputHeight = gradOutput.size(2);
+    //int64_t outputWidth = gradOutput.size(3);
 
     std::array<bool, 3> output_mask = {true, true, true};
 
