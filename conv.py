@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import perfconv
 from torch.utils.cpp_extension import load
-import traceback #TODO remove when no more bugs...
+#import traceback #TODO remove when no more bugs...
 class DeviceError(Exception):
     pass
 # perfconv_cpu = load('perfconv_cpu', sources=['perfconv_cpu.cpp'], verbose=True)
@@ -12,17 +12,17 @@ class ConvFunction(torch.autograd.Function):
     def forward(ctx, input, weights, bias, params):
                     
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward = params
-
+        #strided_backward = True
         kW, kH = weights.shape[2], weights.shape[3]
-        try:
-            outputs = \
+        #try:
+        outputs = \
                 perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                                          is_bias, device, dil1, dil2, groups, upscale_conv)[0]
-        except Exception:
-            print(traceback.format_exc())
-            print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                                         is_bias, device, dil1, dil2, groups, upscale_conv)
-            quit()
+        #except Exception:
+        #    print(traceback.format_exc())
+        #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+        #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
+        #    quit()
         ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward)
         variables = [input, weights, bias]
         ctx.save_for_backward(*variables)
@@ -39,7 +39,8 @@ class ConvFunction(torch.autograd.Function):
         kW, kH = weights.shape[2], weights.shape[3]
 
         gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
-                                kW, kH, dW, dH,
+                                kW, kH, #kernel
+                                dW, dH, #stride
                                 perf_stride[0],perf_stride[1], padW, padH,
                                 is_bias, device, dil1, dil2, groups, strided_backward)
 

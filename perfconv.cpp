@@ -264,15 +264,20 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
     //int64_t outputWidth = gradOutput.size(3);
 
     std::array<bool, 3> output_mask = {true, true, true};
-
     if(stridedBackward){
-        auto backTest = at::convolution_backward(gradOutput,
+        //std::cerr << dW << " dW "<< dW * dWp << " dW*dWp "<< dW/dWp << " dW/dWp \n";
+        //std::cerr << dH << " dH "<< dH * dHp << " dH*dHp "<< dH/dHp << " dH/dHp \n";
+        int64_t strideb1 = dW * dWp;
+        int64_t strideb2 = dH * dHp;
+        auto backTest = at::convolution_backward(gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
+                                                                          torch::indexing::Slice(0, torch::indexing::None, dWp),
+                                                                          torch::indexing::Slice(0, torch::indexing::None, dHp)}),
                                         input,
                                         weights,
                                 torch::IntArrayRef({nOutputPlane}) /*nOutputPlane*/,
-                                torch::IntArrayRef({dW/dWp, dH/dHp})/*stride*/,
-                                torch::IntArrayRef({padW, padH}),
-                                torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
+                                torch::IntArrayRef({strideb1, strideb2})/*stride*/,
+                                torch::IntArrayRef({padW, padH})/*padding*/,
+                                torch::IntArrayRef({dilW, dilH})/*dilation*/, false /*if transpose conv*/,
                                 torch::IntArrayRef({0, 0}) /*out padding?*/, groups, output_mask);
         if (is_bias){
             return {std::get<0>(backTest),std::get<1>(backTest),std::get<2>(backTest)};
