@@ -57,6 +57,8 @@ class PerforatedConv2d(nn.Module):
             self.device = torch.device(device)
         self.groups = groups
         self.in_channels = in_channels
+        if self.in_channels % self.groups != 0:
+            raise ValueError(f'in_channels {in_channels} must be divisible by groups {self.groups}')
         self.out_channels = out_channels
         if type(kernel_size) == int:
             self.kernel_size = (kernel_size, kernel_size)
@@ -98,7 +100,7 @@ class PerforatedConv2d(nn.Module):
         self.upscale_conv = upscale_conv
         self.strided_backward = strided_backward
 
-        self.weight = nn.Parameter(torch.empty(out_channels, in_channels, self.kernel_size[0], self.kernel_size[1], device=self.device))
+        self.weight = nn.Parameter(torch.empty(out_channels, in_channels//self.groups, self.kernel_size[0], self.kernel_size[1], device=self.device))
         self.is_bias = bias
         if self.is_bias:
             self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
