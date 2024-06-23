@@ -84,6 +84,8 @@ class PerforatedConv2d(nn.Module):
             self.stride = stride
         else:
             raise TypeError(f"Incorrect stride type: {type(stride)}, with data: {stride}")
+        if self.stride[0] == 0 or self.stride[1] == 0:
+            raise ValueError(f"Incorrect stride value: Cannot be zero, is {self.stride}")
         if perf_stride is None:
             if perforation_mode is not None:
                 perf_stride = perforation_mode
@@ -127,9 +129,8 @@ class PerforatedConv2d(nn.Module):
     # noinspection PyTypeChecker
     def _do_recomputing(self, shape):
         tmp = 0
-        self.out_x = int(
-            (shape[-2] - ((self.kernel_size[0] - 1) * self.dilation[0]) + 2 * self.padding[
-                0] - 1) // self.stride[0] + 1)
+        self.out_x = int((shape[-2] - ((self.kernel_size[0] - 1) * self.dilation[0]) + 2 * self.padding[0] - 1)
+                         // self.stride[0] + 1)
         tmp_stride1 = self.perf_stride[0] + 1
         while tmp <= 1:
             tmp_stride1 -= 1
