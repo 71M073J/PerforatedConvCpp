@@ -19,10 +19,11 @@ torch::Tensor kern1d(int64_t k, at::TensorOptions options){
 }
 torch::Tensor get_lin_kernel(int64_t w, int64_t h, bool normalised, at::TensorOptions options){
     torch::Tensor k = (kern1d(w, options).index({torch::indexing::Slice(0, torch::indexing::None, 1), torch::indexing::None})
-        .matmul(kern1d(h, options).index({torch::indexing::None,torch::indexing::Slice(0, torch::indexing::None, 1)})))
-        .index({torch::indexing::None,torch::indexing::None,
-                torch::indexing::Slice(0, torch::indexing::None, 1),
-                torch::indexing::Slice(0, torch::indexing::None, 1)}) / (w * h);
+                        .matmul(kern1d(h, options)
+                        .index({torch::indexing::None,torch::indexing::Slice(0, torch::indexing::None, 1)})))
+                    .index({torch::indexing::None,torch::indexing::None,
+                            torch::indexing::Slice(),
+                            torch::indexing::Slice()}) / (w * h);
     if (normalised){
         return k / k.sum();
     }else{
@@ -62,13 +63,13 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
                                     torch::IntArrayRef({0, 0}) /*out padding?*/, groups)};
     }
     //kernel size is more than 1 since 1 has no improvement over normal conv
-    dW = dW * dWp;
-    dH = dH * dHp;
+    //dW = dW * dWp;
+    //dH = dH * dHp;
     //std::cerr << dW << dH << "\n";
     //std::cerr << input << std::endl;
     //std::cerr << "using manual conv w downscaling\n";
     //auto t1 = high_resolution_clock::now();//TODO we don't need to save to variable, can just use directly?= speedup maybe
-    torch::Tensor output = at::convolution(input, weights, bias, torch::IntArrayRef({dW, dH}), torch::IntArrayRef({padW, padH}),
+    torch::Tensor output = at::convolution(input, weights, bias, torch::IntArrayRef({dW * dWp, dH * dHp}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
                                     torch::IntArrayRef({0, 0}) /*out padding?*/, groups);
     //std::cerr << "after conv\n";
@@ -79,8 +80,8 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //self.mod1 = ((self.out_x - 1) % self.perf_stride[0]) + 1
     //self.mod2 = ((self.out_y - 1) % self.perf_stride[1]) + 1
     //padding = (self.mod1 - self.n1) % self.mod1, (self.mod2 - self.n2) % self.mod2 // postane 0, ker so n1 0 , torej a % a = 0
-    int64_t x = dW - 1;
-    int64_t y = dH - 1;
+    int64_t x = dWp - 1; //+ padding for jitter in interpolation, if we ever do that
+    int64_t y = dHp - 1;
 
     //std::cerr << x << ", " << y << std::endl;
     //std::cerr << output << std::endl;
@@ -90,16 +91,18 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //std::cerr << b << std::endl;
     //auto c = b.view(torch::IntArrayRef({batch_size, output.size(1), outW, outH}));
     if (upscale_conv || (dWp > 2) || (dHp > 2)){
-    //std::cerr << "jeba in transpose convolucija\n";
-    //std::cerr << outW << outH <<"\n";
-    //std::cerr << x << y <<"\n";
+        //std::cerr << "jeba in transpose convolucija\n";
+        //std::cerr << outW << outH <<dWp<<dHp <<"\n";
+        //std::cerr << dW << "dw, then dh:"<<dH <<"\n";
+        //std::cerr << get_lin_kernel(dWp, dHp, false, options) <<"\n";
         //auto a = at::convolution(output.view(torch::IntArrayRef({output.size(0) * output.size(1), 1, output.size(2), output.size(3)})),
-        //                    get_lin_kernel(dW, dH, false, options), {} /*bias*/,
-        //                    torch::IntArrayRef({dW, dH}) /*stride*/,
+        //                    get_lin_kernel(dWp, dHp, false, options), {} /*bias*/,
+        //                    torch::IntArrayRef({dWp, dHp}) /*stride*/,
         //                    torch::IntArrayRef({0, 0})/*padding*/, torch::IntArrayRef({dilW, dilH})/*dilation*/, true /*is transpose*/,
-        //                    torch::IntArrayRef({0, 0})/*out padding*/, groups);
+        //                    torch::IntArrayRef({0, 0})/*out padding*/, 1);
         //std::cerr << "a: \n" << std::endl;
         //std::cerr << a << std::endl;
+        //std::cerr << x << "x and y:"<<y << std::endl;
         //auto b = a.index({torch::indexing::Slice(),
         //                  torch::indexing::Slice(),
         //                        torch::indexing::Slice(x, x+outW),
@@ -109,11 +112,12 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
         //auto c = b.view(torch::IntArrayRef({batch_size, output.size(1), outW, outH}));
         //std::cerr << "c: \n" << std::endl;
         //std::cerr << c << std::endl;
+        //return {c};
         return {at::convolution(output.view(torch::IntArrayRef({output.size(0) * output.size(1), 1, output.size(2), output.size(3)})),
-                            get_lin_kernel(dW, dH, false, options), {} /*bias*/,
-                            torch::IntArrayRef({dW, dH}) /*stride*/,
+                            get_lin_kernel(dWp, dHp, false, options)/*generated weight*/, {} /*bias*/,
+                            torch::IntArrayRef({dWp, dHp}) /*stride*/,
                             torch::IntArrayRef({0, 0})/*padding*/, torch::IntArrayRef({dilW, dilH})/*dilation*/, true /*is transpose*/,
-                            torch::IntArrayRef({0, 0})/*out padding*/, groups)
+                            torch::IntArrayRef({0, 0})/*out padding*/, 1)
                 .index({torch::indexing::Slice(),
                           torch::indexing::Slice(),
                                 torch::indexing::Slice(x, x+outW),

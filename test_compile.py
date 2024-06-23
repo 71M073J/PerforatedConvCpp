@@ -10,7 +10,7 @@ def test():
 
     print("STARTING BRUTE FORCE TEST")
     torch.set_printoptions(linewidth=1231231)
-    for groups in [1,2]:
+    for groups in [2,1]:
         for inx in [15, 16, 17, 18, 19]:
             for iny in [15, 16, 17, 18, 19]:
                 for p1 in [2, 3]:
@@ -23,9 +23,9 @@ def test():
                                         try:
                                             #TODO Try just eval modes nekaj pri 2x2 ga zjebe
                                             #TODO on teleport run python shell, make a resnet object and run it in eval2 mode for easier debugging
-                                            c = Conv(4, 2, ks, perf_stride=(p1, p2), padding=pad, bias=bias, stride=stride).cuda()
+                                            c = Conv(4, 2, ks, perf_stride=(p1, p2), padding=pad, bias=bias, stride=stride, groups=groups).cuda()
                                             c.eval()
-                                            c2 = torch.nn.Conv2d(4, 2, ks, padding=pad, bias=bias, stride=stride).cuda()
+                                            c2 = torch.nn.Conv2d(4, 2, ks, padding=pad, bias=bias, stride=stride, groups=groups).cuda()
                                             with torch.no_grad():
                                                 c.weight = torch.nn.Parameter(torch.ones_like(c.weight))
                                                 c2.weight = torch.nn.Parameter(torch.ones_like(c2.weight))
