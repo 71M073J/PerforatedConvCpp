@@ -30,7 +30,7 @@ for device in ["cuda", "cpu"]:
                     print(n)
 
                     c22 = c2(channels, channels, ks).to(device)
-                    c33 = c1(channels, channels, ks, perf_stride=(stride, stride), silent=True).to(device)
+                    c33 = c1(channels, channels, ks, perf_stride=(stride, stride)).to(device)
 
                     data = torch.rand((bs, channels, imgsz, imgsz), device=device)
                     for i in range(10):
