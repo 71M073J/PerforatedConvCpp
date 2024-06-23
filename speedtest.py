@@ -1,7 +1,7 @@
 import os
 
 import torch
-from conv import PerfConv as Conv
+from conv import PerforatedConv2d as Conv
 import time
 import numpy as np
 
