@@ -17,8 +17,8 @@ def test():
         for groups in [2,1]:
             for inx in [17, 18, 19]:
                 for iny in [17, 18, 19]:
-                    for p1 in [2, 3]:
-                        for p2 in [2, 3]:
+                    for p1 in [1, 2, 3]:
+                        for p2 in [1, 2, 3]:
                             for pad in [0, 1]:
                                 for bias in [True, False]:
                                     for ks in [7, 3]:

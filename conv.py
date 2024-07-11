@@ -50,11 +50,17 @@ class ConvFunction(torch.autograd.Function):
 class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1,1), stride=1,padding=(0,0),
                   dilation=1, groups=1, bias=True, device=None, padding_mode=None,
-                 perf_stride=(1,1), upscale_conv=False, strided_backward=False, perforation_mode=None, grad_conv=None):
+                 perf_stride=(1,1), upscale_conv=False, strided_backward=None, perforation_mode=None, grad_conv=None):
         super(PerforatedConv2d, self).__init__()
+        if strided_backward is None:
+            if grad_conv is None:
+                strided_backward = False
+            else:
+                strided_backward = grad_conv
+
         if not (padding_mode is None):
             if padding_mode != "zeros":
-                raise ValueError(f"Unsupported padding mode \"{padding_mode}\"")
+                raise ValueError(f"Unsupported padding mode \"{padding_mode}\", only supports zeros or None")
         if device is None:
             self.device = torch.device("cpu")
         else:
