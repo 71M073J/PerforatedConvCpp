@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import random
 import os
+import time
 import torchvision.models
 from pytorch_cinic.dataset import CINIC10
 from torch.utils.data import DataLoader
@@ -88,12 +89,16 @@ if __name__ == "__main__":
                 print("file for", curr_file, "already exists, skipping...")
                 continue
             with open(f"./res/{curr_file}.txt", "w") as f:
+                t = time.time()
                 results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=False, summarise=False, verbose=False,
                          make_imgs=False, plot_loss=False, vary_perf=vary_perf,
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
                          lr_scheduler=lr_scheduler, validate=False if data == "cifar" else True)
+                t2 = time.time()
+                print(f"{t2-t} seconds elapsed",file=f)
                 print(results)
                 rs = [float(x) for x in results]
                 with open(f"./res/{curr_file}_best.txt", "w") as ffs:
                     print(rs, file=ffs)
+                    print(f"{t2 - t} seconds elapsed", file=ffs)
