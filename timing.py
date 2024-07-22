@@ -64,22 +64,22 @@ if __name__ == "__main__":
     from Architectures.mobilenetv2 import mobilenet_v2
     for arch, name in [(resnet18, "resnet"), (mobilenet_v3_small, "mobnetv3"), (mobilenet_v2, "mobnetv2")]:
         for perf in [(1,1),(2,2),(3,3),"random", "2by2_equivalent"]:
-            vary_perf = None
+            vary_perf=None
             isstr = False
             if type(perf) == str:
                 isstr = True
                 vary_perf = perf
-                perf = (1, 1)
-            eval_mode = [None, (1, 1), (2, 2), (3, 3)]
+                perf = (1,1)
+            eval_mode = [None, (1,1),(2,2),(3,3)]
             net = arch(num_classes=10, perforation_mode=perf, grad_conv=True)
             op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
             # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(op, [100, 150, 175], gamma=0.1)
-            # op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
+            #op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
             epochs = 200
             lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
-            # eval_mode=(2,2)
+            #eval_mode=(2,2)
             rs = 0
-            perfmode = str(perf[0]) + "x" + str(perf[0]) if not isstr else vary_perf
+            perfmode = str(perf[0])+"x"+str(perf[0]) if not isstr else vary_perf
             curr_file = f"{name}_{perfmode}"
             if not os.path.exists("./res/"):
                 os.mkdir("./res")
