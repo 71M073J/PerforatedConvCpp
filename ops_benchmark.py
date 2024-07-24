@@ -76,7 +76,7 @@ if __name__ == "__main__":
             op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
             # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(op, [100, 150, 175], gamma=0.1)
             # op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
-            epochs = 5
+            epochs = 1
             lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
             # eval_mode=(2,2)
             rs = 0
@@ -90,7 +90,7 @@ if __name__ == "__main__":
                 continue
             with open(f"./timing/{curr_file}.txt", "w") as f:
                 t = time.time()
-                results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=False, summarise=False, verbose=False,
+                results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=True, summarise=False, verbose=False,
                          make_imgs=False, plot_loss=False, vary_perf=vary_perf,
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
