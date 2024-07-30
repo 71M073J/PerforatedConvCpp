@@ -11,19 +11,19 @@ class ConvFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weights, bias, params):
                     
-        (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward = params
+        (dW, dH), (padW, padH), is_bias, perf_stride, device, (dil1, dil2), groups, upscale_conv, strided_backward, verbose = params
         #strided_backward = True
         kW, kH = weights.shape[2], weights.shape[3]
         #try:
         outputs = \
                 perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                                         is_bias, device, dil1, dil2, groups, upscale_conv)[0]
+                                         is_bias, device, dil1, dil2, groups, upscale_conv, verbose)[0]
         #except Exception:
         #    print(traceback.format_exc())
         #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
         #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
         #    quit()
-        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward)
+        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose)
         variables = [input, weights, bias]
         ctx.save_for_backward(*variables)
 
@@ -35,14 +35,14 @@ class ConvFunction(torch.autograd.Function):
     
         input, weights, bias = ctx.saved_tensors
 
-        dW, dH, padW, padH, is_bias, device, dil1 ,dil2, groups, perf_stride, strided_backward = ctx.params
+        dW, dH, padW, padH, is_bias, device, dil1 ,dil2, groups, perf_stride, strided_backward, verbose = ctx.params
         kW, kH = weights.shape[2], weights.shape[3]
 
         gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
                                 kW, kH, #kernel
                                 dW, dH, #stride
                                 perf_stride[0],perf_stride[1], padW, padH,
-                                is_bias, device, dil1, dil2, groups, strided_backward)
+                                is_bias, device, dil1, dil2, groups, strided_backward, verbose)
 
         return gradInput, gradWeight, gradBias, None
 
@@ -50,8 +50,10 @@ class ConvFunction(torch.autograd.Function):
 class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1,1), stride=1,padding=(0,0),
                   dilation=1, groups=1, bias=True, device=None, padding_mode=None,
-                 perf_stride=(1,1), upscale_conv=False, strided_backward=None, perforation_mode=None, grad_conv=None):
+                 perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
+                 grad_conv=None, verbose=False):
         super(PerforatedConv2d, self).__init__()
+        self.verbose = verbose
         if strided_backward is None:
             if grad_conv is None:
                 strided_backward = False
@@ -100,7 +102,7 @@ class PerforatedConv2d(nn.Module):
             if perforation_mode is not None:
                 perf_stride = perforation_mode
             else:
-                perf_stride = (2, 2)
+                perf_stride = (1, 1)
         if type(perf_stride) == int:
             self.perf_stride = (perf_stride, perf_stride)
         elif type(perf_stride) == tuple:
@@ -199,7 +201,8 @@ class PerforatedConv2d(nn.Module):
         if self.perf_stride != (1, 1):
             return ConvFunction.apply(input, self.weight, self.bias,
                                       (self.stride, self.padding, self.is_bias,self.perf_stride
-                                      ,self.device, self.dilation, self.groups, self.upscale_conv, self.strided_backward))
+                                      ,self.device, self.dilation, self.groups, self.upscale_conv, self.strided_backward,
+                                       self.verbose))
         else:
             #print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)

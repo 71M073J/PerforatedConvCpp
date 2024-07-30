@@ -1,6 +1,10 @@
+import os
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
+if not os.path.exists("./images"):
+    os.mkdir("./images")
 for name in [("resnet"), ("mobnetv3"), ("mobnetv2")]:
     for perf in [(1, 1), (2, 2), (3, 3), "random", "2by2_equivalent"]:
         losses = []
@@ -36,6 +40,7 @@ for name in [("resnet"), ("mobnetv3"), ("mobnetv2")]:
         ax[0].set_ylim(-0.2, 3)
         ax[1].legend()
         plt.grid()
+        plt.savefig(f"./images/{curr_file}.png")
         plt.show()
 
             #tests = best_ep.split("Average Epoch Test Loss: ")

@@ -13,3 +13,4 @@ setup(
 
 from test_compile import test
 test()
+print("Test done, Succesful")

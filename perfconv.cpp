@@ -38,7 +38,7 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
                                    int64_t dW, int64_t dH, /*stride values*/
                                    int64_t dWp, int64_t dHp, /*perf stride values*/
                                    int64_t padW, int64_t padH, bool is_bias, at::Device device, 
-                                   int64_t dilW, int64_t dilH, int64_t groups, bool upscale_conv) {
+                                   int64_t dilW, int64_t dilH, int64_t groups, bool upscale_conv, bool verbose) {
     //CHECK_INPUT(input);
     //CHECK_INPUT(weights);
     //CHECK_INPUT(bias);
@@ -57,6 +57,9 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //std::cerr << "before downsampling\n";
     //TODO
     if ((kW == 1 && kH == 1) || (dWp < 2 && dHp < 2)){
+        if (verbose){
+            std::cerr << "Using torch impl, with kernel size " << kW << " x " << kH << ", and stride " << dWp << " x " << dHp << std::endl;
+        }
     //std::cerr << "using torch impl\n";
         return {at::convolution(input, weights, bias, torch::IntArrayRef({dW, dH}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
@@ -91,6 +94,10 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //std::cerr << b << std::endl;
     //auto c = b.view(torch::IntArrayRef({batch_size, output.size(1), outW, outH}));
     if (upscale_conv || (dWp > 2) || (dHp > 2)){
+
+        if (verbose){
+            std::cerr << "Using strided conv with conv upscale, with kernel size " << kW << " x " << kH << ", and stride " << dWp << " x " << dHp << std::endl;
+        }
         //std::cerr << "jeba in transpose convolucija\n";
         //std::cerr << outW << outH <<dWp<<dHp <<"\n";
         //std::cerr << dW << "dw, then dh:"<<dH <<"\n";
@@ -127,7 +134,9 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
                             };
 
     }
-
+    if (verbose){
+        std::cerr << "Using torch impl, with kernel size " << kW << " x " << kH << ", and stride " << dWp << " x " << dHp << std::endl;
+    }
     //std::cerr << "after if\n";
     //torch::Tensor out = torch::empty(torch::IntArrayRef({batch_size, nInputPlane, outH, outW}), options);
     torch::Tensor out = torch::zeros(torch::IntArrayRef({batch_size, weights.size(0), outW, outH}), options);
@@ -247,7 +256,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                     int64_t dWp, int64_t dHp, /*perf stride values*/
                                     int64_t padW, int64_t padH,
                                     bool is_bias, at::Device device, int64_t dilW, int64_t dilH,
-                                    int64_t groups, bool stridedBackward) {
+                                    int64_t groups, bool stridedBackward, bool verbose) {
 
     /*CHECK_INPUT(gradOutput);
     CHECK_INPUT(weights);
@@ -269,6 +278,9 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
         //std::cerr << dH << " dH "<< dH * dHp << " dH*dHp "<< dH/dHp << " dH/dHp \n";
         int64_t strideb1 = dW * dWp;
         int64_t strideb2 = dH * dHp;
+        if (verbose){
+            std::cerr << "Strided backward, with stride " << strideb1 << " x " << strideb2 << std::endl;
+        }
         auto backTest = at::convolution_backward(gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
                                                                           torch::indexing::Slice(0, torch::indexing::None, dWp),
                                                                           torch::indexing::Slice(0, torch::indexing::None, dHp)}),
@@ -288,6 +300,9 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
         //std::cerr << gradOutput << std::endl;
         //std::cerr << input << std::endl;
         //std::cerr << out << std::endl;
+        if (verbose){
+            std::cerr << "Normal backward, with stride " << dW << " x " << dH << std::endl;
+        }
         auto backTest = at::convolution_backward(gradOutput,
                                         input,
                                         weights,
