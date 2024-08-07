@@ -243,6 +243,7 @@ class ResNet(nn.Module):
         self.eval()
         self(torch.zeros(self.in_size, device=self.conv1.weight.device))
         self.train()
+        return self
 
 
     def _make_layer(
@@ -360,7 +361,7 @@ class ResNet(nn.Module):
                             ll.downsample[0].recompute = True
                             cnt += 1
         #self._reset()
-        
+        return self
 
     def _get_perforation(self):
         perfs = [self.conv1.perf_stride]

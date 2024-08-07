@@ -13,7 +13,7 @@ from torchvision.models._meta import _IMAGENET_CATEGORIES
 from torchvision.models._utils import _make_divisible, _ovewrite_named_param, handle_legacy_interface
 from .PerforatedConv2d import PerforatedConv2d
 
-__all__ = ["MobileNetV2", "MobileNet_V2_Weights", "mobilenet_v2"]
+__all__ = ["MobileNetV2", "mobilenet_v2"]
 
 
 # necessary for backwards compatibility
@@ -196,6 +196,7 @@ class MobileNetV2(nn.Module):
         self.eval()
         self(torch.zeros(self.in_size, device=self.features[0][0].weight.device))
         self.train()
+        return self
         # init the net for perf sizes (unneeded, but if you want to know the net parameters before first batch it is necessary)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
@@ -242,7 +243,7 @@ class MobileNetV2(nn.Module):
                                 cc[0].recompute = True
                             # elif type(cc) ==
                             cnt += 1
-
+        return self
         
 
     def _get_perforation(self):

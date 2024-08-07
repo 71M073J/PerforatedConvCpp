@@ -272,6 +272,7 @@ class MobileNetV3(nn.Module):
         self.eval()
         self(torch.zeros(self.in_size, device=self.features[0][0].weight.device))
         self.train()
+        return self
         #init the net for perf sizes (unneeded, but if you want to know the net parameters before first batch it is necessary)
 
     def _set_perforation(self, perf):
@@ -316,7 +317,7 @@ class MobileNetV3(nn.Module):
                                 cc[0].perf_stride = perf[cnt]
                                 cc[0].recompute = True
                                 cnt += 1
-
+        return self
         
 
     def _get_perforation(self):
