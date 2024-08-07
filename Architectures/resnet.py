@@ -359,6 +359,7 @@ class ResNet(nn.Module):
                             ll.downsample[0].perf_stride = perf[cnt]
                             ll.downsample[0].recompute = True
                             cnt += 1
+        #self._reset()
         
 
     def _get_perforation(self):

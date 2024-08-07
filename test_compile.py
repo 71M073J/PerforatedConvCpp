@@ -1,7 +1,20 @@
 import torch
 from conv import PerforatedConv2d as Conv
 import traceback
+import perfconv as pf
 
+def validate():
+    device = torch.device("cuda")
+    test = torch.nn.Conv2d(2,2,3)
+    input = torch.arange(0, 36*2, 1).view(1, 2, 6, 6).float()
+    for i in range(3):
+        for j in range(3):
+            res = pf.forward(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)[0]
+            gradInput, gradWeight, gradBias = pf.backward(res, res, test.weight, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True)
+            res, (shape0, shape1) = pf.strided_down(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)
+            pf.upscale(res, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True, shape0, shape1)
+    ...
+#TODO make the edge cleanup optional - idk if it helps
 
 def test():
     c = Conv(4, 2, 3, perf_stride=(2, 2), padding=0, bias=True,
@@ -57,4 +70,5 @@ def test():
 
 
 if __name__ == "__main__":
+    validate()
     test()
