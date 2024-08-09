@@ -7,11 +7,13 @@ def validate():
     device = torch.device("cuda")
     test = torch.nn.Conv2d(2,2,3)
     input = torch.arange(0, 36*2, 1).view(1, 2, 6, 6).float()
-    for i in range(3):
-        for j in range(3):
+    for i in range(1, 4):
+        for j in range(1, 4):
             res = pf.forward(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)[0]
-            gradInput, gradWeight, gradBias = pf.backward(res, res, test.weight, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True)
-            res, (shape0, shape1) = pf.strided_down(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)
+            gradInput, gradWeight, gradBias = pf.backward(res, res, test.weight, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True, False)
+            output = pf.strided_down(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)
+            #print(output, flush=True)
+            res, (shape0, shape1) = output
             pf.upscale(res, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True, shape0, shape1)
     ...
 #TODO make the edge cleanup optional - idk if it helps

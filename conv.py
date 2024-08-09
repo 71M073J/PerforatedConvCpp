@@ -6,8 +6,7 @@ import torch.nn.functional as F
 import perfconv
 from torch.utils.cpp_extension import load
 
-
-# import traceback #TODO remove when no more bugs...
+#TODO in cpp file, add the dtype option as a param
 class DeviceError(Exception):
     pass
 
@@ -17,7 +16,7 @@ class ConvFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weights, bias, params):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (
-        dil1, dil2), groups, upscale_conv, strided_backward, verbose = params
+        dil1, dil2), groups, upscale_conv, strided_backward, verbose, original_back = params
         # strided_backward = True
         kW, kH = weights.shape[2], weights.shape[3]
         # try:
@@ -29,7 +28,7 @@ class ConvFunction(torch.autograd.Function):
         #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
         #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
         #    quit()
-        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose)
+        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_back)
         variables = [input, weights, bias]
         ctx.save_for_backward(*variables)
 
@@ -39,7 +38,7 @@ class ConvFunction(torch.autograd.Function):
     def backward(ctx, gradOutput):
         input, weights, bias = ctx.saved_tensors
 
-        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose = ctx.params
+        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_back = ctx.params
         kW, kH = weights.shape[2], weights.shape[3]
 
         gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
@@ -47,7 +46,7 @@ class ConvFunction(torch.autograd.Function):
                                                             dW, dH,  # stride
                                                             perf_stride[0], perf_stride[1], padW, padH,
                                                             is_bias, device, dil1, dil2, groups, strided_backward,
-                                                            verbose)
+                                                            verbose, original_back)
 
         return gradInput, gradWeight, gradBias, None
 class ConvFunction2(torch.autograd.Function):
@@ -121,7 +120,8 @@ class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False):
+                 grad_conv=None, verbose=False, original_back=False):
+        self.original_back = original_back
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
         if strided_backward is None:
@@ -274,7 +274,7 @@ class PerforatedConv2d(nn.Module):
                                       (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,
                                        self.strided_backward,
-                                       self.verbose))
+                                       self.verbose, self.original_back))
         else:
             # print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
@@ -284,8 +284,9 @@ class DownActivUp(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, activation: Callable = torch.nn.ReLU):
+                 grad_conv=None, verbose=False, activation: Callable = torch.nn.ReLU, original_back=False):
         super(DownActivUp, self).__init__()
+        self.original_back = original_back
         self.verbose = verbose
         self.activation = activation()
         if strided_backward is None:
@@ -438,7 +439,7 @@ class DownActivUp(nn.Module):
                                       (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,
                                        self.strided_backward,
-                                       self.verbose))
+                                       self.verbose, self.original_back))
         else:
             # print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)

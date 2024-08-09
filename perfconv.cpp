@@ -228,7 +228,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                     int64_t dWp, int64_t dHp, /*perf stride values*/
                                     int64_t padW, int64_t padH,
                                     bool is_bias, at::Device device, int64_t dilW, int64_t dilH,
-                                    int64_t groups, bool stridedBackward, bool verbose) {
+                                    int64_t groups, bool stridedBackward, bool verbose, bool originalConvBack) {
     int64_t nOutputPlane = gradOutput.size(1);
     std::array<bool, 3> output_mask = {true, true, true};
     if(stridedBackward){
@@ -239,9 +239,26 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
         if (verbose){
             std::cout << "Strided backward, with stride " << strideb1 << " x " << strideb2 << std::endl;
         }
-        auto backTest = at::convolution_backward(gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
+        //std::cout << "forcing Strided backward, with stride " << strideb1 << " x " << strideb2 << std::endl;
+        auto options = torch::TensorOptions().dtype(torch::kFloat32).device(input.device());
+        int64_t x = dWp + padW - 1;
+        int64_t y = dHp + padH - 1;
+        //forcing "original" python version of backward
+        if (originalConvBack){
+            gradOutput = at::convolution(gradOutput, get_lin_kernel(dWp, dHp, false, options), {}, torch::IntArrayRef({dWp, dHp}) /*stride*/,torch::IntArrayRef({x, y})/*padding*/,
+                                         torch::IntArrayRef({dilW, dilH})/*dilation*/, false /*is transpose*/,
+                                            torch::IntArrayRef({0, 0})/*out padding*/, 1);
+        }else{
+            gradOutput = gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
                                                                           torch::indexing::Slice(0, torch::indexing::None, dWp),
-                                                                          torch::indexing::Slice(0, torch::indexing::None, dHp)}),
+                                                                          torch::indexing::Slice(0, torch::indexing::None, dHp)});
+        }
+
+        /*gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
+                                                                          torch::indexing::Slice(0, torch::indexing::None, dWp),
+                                                                          torch::indexing::Slice(0, torch::indexing::None, dHp)})
+        */
+        auto backTest = at::convolution_backward(gradOutput,
                                         input,
                                         weights,
                                 torch::IntArrayRef({nOutputPlane}) /*nOutputPlane*/,
@@ -256,7 +273,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
         }
     }else{
         if (verbose){
-            std::cout << "Normal backward, with stride " << dW << " x " << dH << std::endl;
+            std::cout << "Normal backward, using every 2nd as input, with stride " << dW << " x " << dH << std::endl;
         }
         auto backTest = at::convolution_backward(gradOutput,
                                         input,
@@ -307,7 +324,7 @@ std::vector<torch::Tensor> strided_down(torch::Tensor input,
     //std::cerr << "using torch impl\n";
         return {at::convolution(input, weights, bias, torch::IntArrayRef({dW, dH}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
-                                    torch::IntArrayRef({0, 0}) /*out padding?*/, groups)};
+                                    torch::IntArrayRef({0, 0}) /*out padding?*/, groups), torch::tensor({outW, outH})};
     }
     //kernel size is more than 1 since 1 has no improvement over normal conv
     //dW = dW * dWp;
