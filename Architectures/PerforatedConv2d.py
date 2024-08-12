@@ -117,6 +117,8 @@ class Upsample(torch.autograd.Function):
 
 
 class PerforatedConv2d(nn.Module):
+    def __repr__(self):
+        return f"PerforatedConv2d({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
@@ -152,11 +154,6 @@ class PerforatedConv2d(nn.Module):
             self.padding = (padding, padding)
         elif type(padding) == tuple:
             self.padding = padding
-        elif type(padding) == str:
-            if padding == "same":
-                self.padding = (self.kernel_size[0]//2, self.kernel_size[1]//2)
-            else:
-                raise ValueError(f"Incorrect padding value, \"{padding}\" not supported")
         else:
             raise TypeError(f"Incorrect padding type: {type(padding)}, with data: {padding}")
         if type(dilation) == int:
@@ -178,7 +175,6 @@ class PerforatedConv2d(nn.Module):
                 perf_stride = perforation_mode
             else:
                 perf_stride = (1, 1)
-
         if type(perf_stride) == int:
             self.perf_stride = (perf_stride, perf_stride)
         elif type(perf_stride) == tuple:
@@ -210,6 +206,7 @@ class PerforatedConv2d(nn.Module):
         self.calculations = 0
         self.in_shape = None
         self.do_offsets = False
+        self.jitter = False
         self.hard_limit = (self.kernel_size[0] == 1 and self.kernel_size[1] == 1)
 
     def set_perf(self, perf):
@@ -266,16 +263,24 @@ class PerforatedConv2d(nn.Module):
             nn.init.constant_(self.bias, 0)
 
     def forward(self, input):
-
+        if input.device != self.weight.device:
+            raise DeviceError(
+                f"Expected both input and weight to be on the same device, got {input.device} and {self.weight.device}.")
         if self.hard_limit:
             self.perf_stride = (1, 1)
         if self.recompute:
             self._do_recomputing(input.shape)
 
-        if input.device != self.weight.device:
-            raise DeviceError(
-                f"Expected both input and weight to be on the same device, got {input.device} and {self.weight.device}.")
+
         if self.perf_stride != (1, 1):
+            #jitter = 0
+            #if self.jitter:
+            #    jitter = (self.mod1 - self.n1) % self.mod1, (self.mod2 - self.n2) % self.mod2
+            #    if self.do_offsets:
+            #        self.n1 = (self.n1 + 1) % self.mod1
+            #        if self.n1 == 0:
+            #            self.n2 = (self.n2 + 1) % self.mod2  # legit offseti
+            #    print("trying to jitter")
             return ConvFunction.apply(input, self.weight, self.bias,
                                       (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,

@@ -1,3 +1,5 @@
+import time
+
 import torch
 import torch.nn as nn
 import random
@@ -95,15 +97,19 @@ if __name__ == "__main__":
                 print("file for", curr_file, "already exists, skipping...")
                 continue
             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
+                t_0 = time.time()
                 results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=False, summarise=False, verbose=False,
                          make_imgs=make_imgs, plot_loss=False, vary_perf=vary_perf,
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
                          lr_scheduler=lr_scheduler, validate=False if data == "cifar" else True)
                 print(results)
+                t1 = time.time()
+                print(t1 - t_0, "Seconds elapsed for network", curr_file)
                 rs = [float(x) for x in results]
                 with open(f"./{prefix}/{curr_file}_best.txt", "w") as ffs:
                     print(rs, file=ffs)
+                    print(t1 - t_0, "Seconds elapsed for network", curr_file, file=ffs)
 
 
 

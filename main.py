@@ -183,8 +183,8 @@ def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, 
                             perfs[i] = 2,3
                         elif rn < 0.44327089190483093:
                             perfs[i] = 3,2
-                        elif rn < 0.5378847792744637:
-                            perfs[i] = 3,1
+                        #elif rn < 0.5378847792744637: #ultra bad memory layout, skipping - 3,1 is the same time complexity
+                        #    perfs[i] = 3,1
                         elif rn < 0.6407210007309914:
                             perfs[i] = 1,3
                         elif rn < 0.7435572221875191:
@@ -282,8 +282,11 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
             if eval_mode is not None:
                 if type(eval_mode) == tuple:
                     net._set_perforation([eval_mode] * n_conv)
+
                 else:
                     net._set_perforation(eval_mode)
+                net._reset()
+                print(net._get_perforation())
             class_accs = np.zeros((2, 15))
             l2 = 0
             for i, (batch, classes) in enumerate(dataset2):
