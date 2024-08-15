@@ -154,6 +154,13 @@ class PerforatedConv2d(nn.Module):
             self.padding = (padding, padding)
         elif type(padding) == tuple:
             self.padding = padding
+        elif type(padding) == str:
+            if padding == "same":
+                self.padding = (self.kernel_size[0]//2, self.kernel_size[1]//2)
+            elif padding == "none":
+                self.padding = (0,0)
+            else:
+                raise ValueError("String padding modes other than \"same\" and \"none\" are not supported")
         else:
             raise TypeError(f"Incorrect padding type: {type(padding)}, with data: {padding}")
         if type(dilation) == int:
@@ -189,11 +196,16 @@ class PerforatedConv2d(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(out_channels, in_channels // self.groups, self.kernel_size[0], self.kernel_size[1],
                         device=self.device))
-        self.is_bias = bias
-        if self.is_bias:
-            self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+        if type(bias) == bool:
+            self.is_bias = bias
+            if bias:
+                self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+            else:
+                self.bias = None
         else:
-            self.bias = None
+            self.bias = nn.Parameter(torch.clone(bias))
+            self.is_bias = True
+
         self._initialize_weights()
 
         self.out_x = 0

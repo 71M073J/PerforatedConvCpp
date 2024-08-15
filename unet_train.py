@@ -23,7 +23,6 @@ from segmentation.models.slim_squeeze_unet import (
 )
 from segmentation.models.slim_unet import SlimUNet
 from Architectures.UNet import UNet as MiniUnet
-from Architectures.simple_unet import SimpleConv as NormalUnet
 
 
 class Training:
@@ -249,8 +248,6 @@ class Training:
             else:
                 if self.architecture == "unet_mini":
                     model = MiniUnet(out_channels, perforation_mode=(2,2))
-                elif self.architecture == "unet_normal":
-                    model = NormalUnet(3, out_channels, perforation_mode=(2,2))
                 else:
                     raise ValueError("Unknown model architecture.")
         else:
@@ -338,11 +335,13 @@ if __name__ == "__main__":
     # We need to train the new geok models of different sizes with and without transfer learning from cofly dataset
     # We do this for both sunet and ssunet
     # for architecture in ["slim", "squeeze"]:
-    architecture = "unet_normal"
+    architecture = "unet_mini"
     #architecture = "unet_normal"
     for image_resolution, batch_size in zip(
-        [(128, 128), (256, 256), (512, 512)],
-        [2**5, 2**3, 2**1],
+        [#(128, 128), (256, 256),
+         (512, 512)],
+        [2**5, #2**3, 2**1
+         ],
     ):
         # tr = Training(
         #     device,
