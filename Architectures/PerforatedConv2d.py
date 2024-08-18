@@ -16,7 +16,7 @@ class ConvFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weights, bias, params):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (
-        dil1, dil2), groups, upscale_conv, strided_backward, verbose, original_back = params
+        dil1, dil2), groups, upscale_conv, strided_backward, verbose, original_conv_back = params
         # strided_backward = True
         kW, kH = weights.shape[2], weights.shape[3]
         # try:
@@ -28,7 +28,7 @@ class ConvFunction(torch.autograd.Function):
         #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
         #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
         #    quit()
-        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_back)
+        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_conv_back)
         variables = [input, weights, bias]
         ctx.save_for_backward(*variables)
 
@@ -38,7 +38,7 @@ class ConvFunction(torch.autograd.Function):
     def backward(ctx, gradOutput):
         input, weights, bias = ctx.saved_tensors
 
-        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_back = ctx.params
+        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_conv_back = ctx.params
         kW, kH = weights.shape[2], weights.shape[3]
 
         gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
@@ -46,60 +46,21 @@ class ConvFunction(torch.autograd.Function):
                                                             dW, dH,  # stride
                                                             perf_stride[0], perf_stride[1], padW, padH,
                                                             is_bias, device, dil1, dil2, groups, strided_backward,
-                                                            verbose, original_back)
-
-        return gradInput, gradWeight, gradBias, None
-class ConvFunction2(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input, weights, bias, params):
-        (dW, dH), (padW, padH), is_bias, perf_stride, device, (
-        dil1, dil2), groups, upscale_conv, strided_backward, verbose, activ = params
-        # strided_backward = True
-        kW, kH = weights.shape[2], weights.shape[3]
-        # try:
-        outputs, outW, outH = perfconv.strided_down(input, weights, bias, kW, kH, dW, dH,
-                                                    perf_stride[0], perf_stride[1], padW, padH,
-                                                    is_bias, device, dil1, dil2, groups, upscale_conv, verbose)
-        outputs = activ(outputs)
-        outputs = perfconv.upscale(outputs, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                             is_bias, device, dil1, dil2, groups, upscale_conv, verbose, outW, outH)[0]
-        # except Exception:
-        #    print(traceback.format_exc())
-        #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-        #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
-        #    quit()
-        ctx.params = (dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose)
-        variables = [input, weights, bias]
-        ctx.save_for_backward(*variables)
-
-        return outputs
-
-    @staticmethod
-    def backward(ctx, gradOutput):
-        input, weights, bias = ctx.saved_tensors
-
-        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose = ctx.params
-        kW, kH = weights.shape[2], weights.shape[3]
-
-        gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
-                                                            kW, kH,  # kernel
-                                                            dW, dH,  # stride
-                                                            perf_stride[0], perf_stride[1], padW, padH,
-                                                            is_bias, device, dil1, dil2, groups, strided_backward,
-                                                            verbose)
+                                                            verbose, original_conv_back, False)
 
         return gradInput, gradWeight, gradBias, None
 
-class Upsample(torch.autograd.Function):
+class Up(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, params):
         (dW, dH), (padW, padH), is_bias, perf_stride, device, (
-            dil1, dil2), groups, upscale_conv, strided_backward, verbose, kW, kH = params
+            dil1, dil2), groups, upscale_conv, strided_backward, verbose, (kW, kH), outW, outH = params
         # strided_backward = True
         # try:
+
         outputs = \
-            perfconv.upsample(input, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
-                              is_bias, device, dil1, dil2, groups, upscale_conv, verbose)[0]
+            perfconv.upscale(input, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+                              is_bias, device, dil1, dil2, groups, upscale_conv, verbose, outW, outH)[0]
         # except Exception:
         #    print(traceback.format_exc())
         #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
@@ -112,9 +73,43 @@ class Upsample(torch.autograd.Function):
     @staticmethod
     def backward(ctx, gradOutput):
         dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, kH, kW = ctx.params
+        return gradOutput[:, :, ::perf_stride[0], ::perf_stride[1]], None
 
-        return gradOutput[:, :, perf_stride[0], perf_stride[1]], None
+class Down(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, weights, bias, params):
+        (dW, dH), (padW, padH), is_bias, perf_stride, device, (
+            dil1, dil2), groups, upscale_conv, strided_backward, verbose, original_conv_back, kW, kH = params
+        # strided_backward = True
+        # try:
 
+        outputs = \
+            perfconv.strided_down(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+                              is_bias, device, dil1, dil2, groups, upscale_conv, verbose)[0]
+        # except Exception:
+        #    print(traceback.format_exc())
+        #    print(input.shape, weights.shape, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+        #                                 is_bias, device, dil1, dil2, groups, upscale_conv)
+        #    quit()
+        variables = [input, weights, bias]
+        ctx.save_for_backward(*variables)
+        ctx.params = (
+        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_conv_back, kW, kH)
+        return outputs
+
+    @staticmethod
+    def backward(ctx, gradOutput):
+        dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_conv_back, kH, kW = ctx.params
+        input, weights, bias = ctx.saved_tensors
+        gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
+                                                            kW, kH,  # kernel
+                                                            dW, dH,  # stride
+                                                            perf_stride[0], perf_stride[1], padW, padH,
+                                                            is_bias, device, dil1, dil2, groups, strided_backward,
+                                                            verbose, original_conv_back, True#noDownscale
+                                                            )
+
+        return gradInput, gradWeight, gradBias, None
 
 class PerforatedConv2d(nn.Module):
     def __repr__(self):
@@ -122,8 +117,8 @@ class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, original_back=False):
-        self.original_back = original_back
+                 grad_conv=None, verbose=False, original_conv_back=False):
+        self.original_conv_back = original_conv_back
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
         if strided_backward is None:
@@ -297,27 +292,27 @@ class PerforatedConv2d(nn.Module):
                                       (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,
                                        self.strided_backward,
-                                       self.verbose, self.original_back))
+                                       self.verbose, self.original_conv_back))
         else:
             # print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
-
 class DownActivUp(nn.Module):
+    def __repr__(self):
+        return f"PerforatedConv2d({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
-                 dilation=1, groups=1, bias=True, device=None, padding_mode=None,
+                 dilation=1, groups=1, bias=True, device=None, padding_mode=None, activation=torch.nn.ReLU(),
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, activation: Callable = torch.nn.ReLU, original_back=False):
+                 grad_conv=None, verbose=False, original_conv_back=False):
+        self.original_conv_back = original_conv_back
         super(DownActivUp, self).__init__()
-        self.original_back = original_back
         self.verbose = verbose
-        self.activation = activation()
         if strided_backward is None:
             if grad_conv is None:
                 strided_backward = True
             else:
                 strided_backward = grad_conv
-
+        self.activ = activation
         if not (padding_mode is None):
             if padding_mode != "zeros":
                 raise ValueError(f"Unsupported padding mode \"{padding_mode}\", only supports zeros or None")
@@ -340,6 +335,13 @@ class DownActivUp(nn.Module):
             self.padding = (padding, padding)
         elif type(padding) == tuple:
             self.padding = padding
+        elif type(padding) == str:
+            if padding == "same":
+                self.padding = (self.kernel_size[0]//2, self.kernel_size[1]//2)
+            elif padding == "none":
+                self.padding = (0,0)
+            else:
+                raise ValueError("String padding modes other than \"same\" and \"none\" are not supported")
         else:
             raise TypeError(f"Incorrect padding type: {type(padding)}, with data: {padding}")
         if type(dilation) == int:
@@ -375,11 +377,16 @@ class DownActivUp(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(out_channels, in_channels // self.groups, self.kernel_size[0], self.kernel_size[1],
                         device=self.device))
-        self.is_bias = bias
-        if self.is_bias:
-            self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+        if type(bias) == bool:
+            self.is_bias = bias
+            if bias:
+                self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+            else:
+                self.bias = None
         else:
-            self.bias = None
+            self.bias = nn.Parameter(torch.clone(bias))
+            self.is_bias = True
+
         self._initialize_weights()
 
         self.out_x = 0
@@ -392,6 +399,7 @@ class DownActivUp(nn.Module):
         self.calculations = 0
         self.in_shape = None
         self.do_offsets = False
+        self.jitter = False
         self.hard_limit = (self.kernel_size[0] == 1 and self.kernel_size[1] == 1)
 
     def set_perf(self, perf):
@@ -448,21 +456,37 @@ class DownActivUp(nn.Module):
             nn.init.constant_(self.bias, 0)
 
     def forward(self, input):
-
+        if input.device != self.weight.device:
+            raise DeviceError(
+                f"Expected both input and weight to be on the same device, got {input.device} and {self.weight.device}.")
         if self.hard_limit:
             self.perf_stride = (1, 1)
         if self.recompute:
             self._do_recomputing(input.shape)
 
-        if input.device != self.weight.device:
-            raise DeviceError(
-                f"Expected both input and weight to be on the same device, got {input.device} and {self.weight.device}.")
+
         if self.perf_stride != (1, 1):
-            return ConvFunction.apply(input, self.weight, self.bias,
-                                      (self.stride, self.padding, self.is_bias, self.perf_stride
+            #jitter = 0
+            #if self.jitter:
+            #    jitter = (self.mod1 - self.n1) % self.mod1, (self.mod2 - self.n2) % self.mod2
+            #    if self.do_offsets:
+            #        self.n1 = (self.n1 + 1) % self.mod1
+            #        if self.n1 == 0:
+            #            self.n2 = (self.n2 + 1) % self.mod2  # legit offseti
+            #    print("trying to jitter")
+            x = Down.apply(input, self.weight, self.bias, (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,
                                        self.strided_backward,
-                                       self.verbose, self.original_back))
+                                       self.verbose, self.original_conv_back, self.kernel_size[0], self.kernel_size[1]))
+            x = self.activ(x)
+            return Up.apply(x, (self.stride, self.padding, self.is_bias, self.perf_stride, self.device, self.dilation,
+                                self.groups, self.upscale_conv, self.strided_backward, self.verbose, self.kernel_size,
+                                self.out_x, self.out_y))
+            #return ConvFunction.apply(input, self.weight, self.bias,
+            #                          (self.stride, self.padding, self.is_bias, self.perf_stride
+            #                           , self.device, self.dilation, self.groups, self.upscale_conv,
+            #                           self.strided_backward,
+            #                           self.verbose, self.original_conv_back))
         else:
             # print("using torch impl")
             return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)

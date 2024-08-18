@@ -1,8 +1,9 @@
 import os
 from datetime import datetime
 from pathlib import Path
-
+import time
 import torch
+from torchinfo import summary
 import wandb as wandb
 from fvcore.nn import FlopCountAnalysis, parameter_count
 from torch import tensor
@@ -22,7 +23,9 @@ from segmentation.models.slim_squeeze_unet import (
     SlimSqueezeUNetCofly,
 )
 from segmentation.models.slim_unet import SlimUNet
-from Architectures.UNet import UNet as MiniUnet
+from agriadapt.dl_scripts.UNet import UNet as MiniUnet
+from Architectures.UNet import UNet as UNetDownUp
+from perforateCustomNet import perforate_net_perfconv
 
 
 class Training:
@@ -246,8 +249,14 @@ class Training:
                     model = SlimSqueezeUNetCofly(out_channels)
                 # model = SlimPrunedSqueezeUNet(in_channels, dropout=self.dropout)
             else:
-                if self.architecture == "unet_mini":
-                    model = MiniUnet(out_channels, perforation_mode=(2,2))
+                if self.architecture == "unet_perf":
+                    model = MiniUnet(out_channels)
+                    perforate_net_perfconv(model, perforation_mode=(2,2))
+                elif self.architecture == "unet":
+                    model = MiniUnet(out_channels)
+                    #perforate_net_perfconv(model, perforation_mode=(1,1))
+                elif self.architecture == "unet_downup":
+                    model = UNetDownUp(out_channels, perforation_mode=(2,2))
                 else:
                     raise ValueError("Unknown model architecture.")
         else:
@@ -256,7 +265,7 @@ class Training:
                 / "segmentation/training/garage/"
                 / self.continue_model
             )
-
+        summary(model, input_size=(self.batch_size, 3, self.image_resolution[0], self.image_resolution[1]))
         # summary(model, input_size=(in_channels, 128, 128))
         model.to(self.device)
 
@@ -335,12 +344,14 @@ if __name__ == "__main__":
     # We need to train the new geok models of different sizes with and without transfer learning from cofly dataset
     # We do this for both sunet and ssunet
     # for architecture in ["slim", "squeeze"]:
-    architecture = "unet_mini"
-    #architecture = "unet_normal"
+    architecture = "unet_downup"
+    architecture = "unet"
+    #architecture = "unet_perf"
     for image_resolution, batch_size in zip(
         [#(128, 128), (256, 256),
          (512, 512)],
-        [2**5, #2**3, 2**1
+        [#2**5, 2**3,
+         2**1
          ],
     ):
         # tr = Training(
@@ -351,6 +362,7 @@ if __name__ == "__main__":
         #     batch_size=batch_size,
         # )
         # tr.train()
+        t0 = time.time()
         print(image_resolution, batch_size)
         tr = Training(
             device,
@@ -361,3 +373,18 @@ if __name__ == "__main__":
             continue_model="",
         )
         tr.train()
+        t1 = time.time()
+        print("perforated training completed in", t1 - t0, "seconds")
+        t0 = time.time()
+        print(image_resolution, batch_size)
+        tr = Training(
+            device,
+            dataset="geok",
+            image_resolution=image_resolution,
+            architecture=architecture+"2",
+            batch_size=batch_size,
+            continue_model="",
+        )
+        tr.train()
+        t1 = time.time()
+        print("perforated training completed in", t1 - t0, "seconds")

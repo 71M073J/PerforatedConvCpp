@@ -228,7 +228,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                     int64_t dWp, int64_t dHp, /*perf stride values*/
                                     int64_t padW, int64_t padH,
                                     bool is_bias, at::Device device, int64_t dilW, int64_t dilH,
-                                    int64_t groups, bool stridedBackward, bool verbose, bool originalConvBack) {
+                                    int64_t groups, bool stridedBackward, bool verbose, bool originalConvBack, bool noDownscale) {
     int64_t nOutputPlane = gradOutput.size(1);
     std::array<bool, 3> output_mask = {true, true, true};
     if(stridedBackward){
@@ -248,6 +248,8 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
             gradOutput = at::convolution(gradOutput, get_lin_kernel(dWp, dHp, false, options), {}, torch::IntArrayRef({dWp, dHp}) /*stride*/,torch::IntArrayRef({x, y})/*padding*/,
                                          torch::IntArrayRef({dilW, dilH})/*dilation*/, false /*is transpose*/,
                                             torch::IntArrayRef({0, 0})/*out padding*/, 1);
+        }else if(noDownscale){//gradOutput is already good
+
         }else{
             gradOutput = gradOutput.index({torch::indexing::Slice(),torch::indexing::Slice(),
                                                                           torch::indexing::Slice(0, torch::indexing::None, dWp),
@@ -273,7 +275,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
         }
     }else{
         if (verbose){
-            std::cout << "Normal backward, using every 2nd as input, with stride " << dW << " x " << dH << std::endl;
+            std::cout << "Normal backward, using every input, with stride " << dW << " x " << dH << std::endl;
         }
         auto backTest = at::convolution_backward(gradOutput,
                                         input,
@@ -333,7 +335,9 @@ std::vector<torch::Tensor> strided_down(torch::Tensor input,
     //std::cerr << input << std::endl;
     //std::cerr << "using manual conv w downscaling\n";
     //auto t1 = high_resolution_clock::now();//TODO we don't need to save to variable, can just use directly?= speedup maybe
-
+    if (verbose){
+        std::cout << "Using strided down, with kernel size " << kW << " x " << kH << ", and stride " << dWp << " x " << dHp << std::endl;
+    }
     //---downsampling conv---
     return {at::convolution(input, weights, bias, torch::IntArrayRef({dW * dWp, dH * dHp}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,

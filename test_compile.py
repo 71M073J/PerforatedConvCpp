@@ -1,5 +1,6 @@
 import torch
-from conv import PerforatedConv2d as Conv
+from Architectures.PerforatedConv2d import PerforatedConv2d as Conv
+from Architectures.PerforatedConv2d import DownActivUp as ConvRelu
 import traceback
 import perfconv as pf
 
@@ -10,7 +11,8 @@ def validate():
     for i in range(1, 4):
         for j in range(1, 4):
             res = pf.forward(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)[0]
-            gradInput, gradWeight, gradBias = pf.backward(res, res, test.weight, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True, False)
+            gradInput, gradWeight, gradBias = pf.backward(res, res, test.weight, 3, 3, 1, 1, i, j, 1, 1, True, device, 1, 1, 1, False, True, False, False)
+            #print([type(x) for x in [input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True]])
             output = pf.strided_down(input, test.weight, test.bias, 3, 3, 1, 1, i, j, 0, 0, True, device, 1, 1, 1, False, True)
             #print(output, flush=True)
             res, (shape0, shape1) = output
@@ -21,10 +23,13 @@ def validate():
 def test():
     c = Conv(4, 2, 3, perf_stride=(2, 2), padding=0, bias=True,
                                                          stride=1, groups=1, strided_backward=True)
-
+    c2 = ConvRelu(4,2,3,activation=torch.nn.ReLU(),
+                  perf_stride=(2,2), padding=0, bias=True, stride=1, groups=1, strided_backward=True)
     #c.eval()
     h = c(torch.ones((2, 4, 19, 19)))
     h.sum().backward()
+    h2 = c2(torch.ones((2, 4, 19, 19)))
+    h2.sum().backward()
     #quit()
     print("STARTING BRUTE FORCE TEST")
     torch.set_printoptions(linewidth=1231231)
@@ -72,5 +77,7 @@ def test():
 
 
 if __name__ == "__main__":
+    print("validating")
     validate()
+    print("testing...")
     test()

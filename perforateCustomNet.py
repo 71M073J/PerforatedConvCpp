@@ -1,37 +1,9 @@
-from Architectures.PerforatedConv2d import PerforatedConv2d
+from Architectures.PerforatedConv2d import PerforatedConv2d, DownActivUp
 import torch
 
 
 from types import MethodType
 import numpy as np
-def _get_total_n_calc(net, perf_compare=(2,2)):
-    default_perf = net._get_perforation()
-    calculationsBase = net._set_perforation((1, 1))._reset()._get_n_calc()
-    calculationsOther = net._set_perforation(perf_compare)._reset()._get_n_calc()
-
-    base_n = np.array([x[0] for x in calculationsBase])
-    base_o = np.array([x[0] for x in calculationsOther])
-    #n_diff = sum([int(calculationsBase[i][0] == calculationsOther[i][0]) for i in range(len(calculationsBase))])
-    net._set_perforation(default_perf)
-    return f"{(base_n != base_o).sum()} out of {len(calculationsBase)} layers perforated, " \
-           f"going from {base_n.sum()} to {base_o.sum()} operations ({(int(10000 * ( base_o.sum().astype(float)/base_n.sum().astype(float)))/100)}% of size).\n" \
-           f"(Counting only Conv layers)"
-
-def replace_module(net, from_class, perforation_mode, pretrained):
-    for name, submodule in net.named_children():
-        if type(submodule) == from_class:
-            original = getattr(net, name)
-            new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
-                                   original.stride, original.padding, original.dilation, original.groups,
-                                   original.bias, original.weight.device, perforation_mode=perforation_mode)
-            if pretrained:
-                with torch.no_grad():
-                    new.weight = torch.nn.Parameter(torch.clone(original.weight))
-                    if original.bias:
-                        new.bias = torch.nn.Parameter(torch.clone(original.bias))
-            setattr(net, name, new)
-        elif len(list(submodule.named_children())) != 0:
-            replace_module(submodule, from_class, perforation_mode=perforation_mode, pretrained=pretrained)
 
 
 def flatten_list(_2d_list):
@@ -45,6 +17,67 @@ def flatten_list(_2d_list):
         else:
             flat_list.append(element)
     return flat_list
+def _get_total_n_calc(net, perf_compare=(2,2)):
+    default_perf = net._get_perforation()
+    calculationsBase = net._set_perforation((1, 1))._reset()._get_n_calc()
+    calculationsOther = net._set_perforation(perf_compare)._reset()._get_n_calc()
+
+    base_n = np.array([x[0] for x in calculationsBase])
+    base_o = np.array([x[0] for x in calculationsOther])
+    #n_diff = sum([int(calculationsBase[i][0] == calculationsOther[i][0]) for i in range(len(calculationsBase))])
+    net._set_perforation(default_perf)
+    return f"{(base_n != base_o).sum()} out of {len(calculationsBase)} layers perforated, " \
+           f"going from {base_n.sum()} to {base_o.sum()} operations ({(int(10000 * ( base_o.sum().astype(float)/base_n.sum().astype(float)))/100)}% of size).\n" \
+           f"(Counting only Conv layers)"
+
+def replace_module_perfconv(net, from_class, perforation_mode, pretrained):
+    for name, submodule in net.named_children():
+        if type(submodule) == from_class:
+            original = getattr(net, name)
+            new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
+                                   original.stride, original.padding, original.dilation, original.groups,
+                                   original.bias, original.weight.device, perforation_mode=perforation_mode)
+            if pretrained:
+                with torch.no_grad():
+                    new.weight = torch.nn.Parameter(torch.clone(original.weight))
+                    if original.bias:
+                        new.bias = torch.nn.Parameter(torch.clone(original.bias))
+            setattr(net, name, new)
+        elif len(list(submodule.named_children())) != 0:
+            replace_module_perfconv(submodule, from_class, perforation_mode=perforation_mode, pretrained=pretrained)
+
+
+def replace_module_downActivUp(net, perforation_mode, pretrained, from_class=torch.nn.Conv2d, layers=None, activ_class=torch.nn.ReLU, start_n=0):
+    raise NotImplementedError("i don't know how to dynamically adjust to operation order with different actiovations/batchnorms etc")
+    print("this deletes ALL activations...how to implement=?")
+    def get_layers(component):
+        convs = []
+        for submodule in component.children():
+            if len(list(submodule.children())) != 0:
+                convs.extend(flatten_list(get_layers(submodule)))
+            else:
+                convs.append(submodule)
+        return flatten_list(convs)
+
+    if layers is None:
+        layers = get_layers(net)
+        start_n = [0]
+    for name, submodule in net.named_children():
+        if type(submodule) == from_class:
+            original = getattr(net, name)
+            new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
+                                   original.stride, original.padding, original.dilation, original.groups,
+                                   original.bias, original.weight.device, perforation_mode=perforation_mode)
+            if pretrained:
+                with torch.no_grad():
+                    new.weight = torch.nn.Parameter(torch.clone(original.weight))
+                    if original.bias:
+                        new.bias = torch.nn.Parameter(torch.clone(original.bias))
+            setattr(net, name, new)
+        elif len(list(submodule.named_children())) != 0:
+            replace_module_perfconv(...)
+        start_n[0]+=1
+
 def _get_perforation(self, part=None):
     if part is None:
         part = self
@@ -110,9 +143,15 @@ def add_functs(net):
     net._get_n_calc = MethodType(_get_n_calc, net)
     net._get_total_n_calc = MethodType(_get_total_n_calc, net)
 
-def perforate_net(net, from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False, in_size=(1,3,512,512)):
+def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False, in_size=(1,3,512,512)):
     setattr(net, "in_size", in_size)
-    replace_module(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained)
+    replace_module_perfconv(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained)
+    add_functs(net)
+    print(net.in_size)
+    net._reset()
+def perforate_net_downActivUp(net, from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False, in_size=(1,3,512,512)):
+    setattr(net, "in_size", in_size)
+    replace_module_downActivUp(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained)
     add_functs(net)
     print(net.in_size)
     net._reset()

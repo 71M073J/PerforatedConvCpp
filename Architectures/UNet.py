@@ -6,7 +6,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from torchvision.models._api import WeightsEnum
 from torchvision.models._utils import _ovewrite_named_param
-from .PerforatedConv2d import PerforatedConv2d
+from .PerforatedConv2d import PerforatedConv2d, DownActivUp
 import numpy as np
 
 
@@ -54,24 +54,26 @@ class UNet(nn.Module):
     def contract_block(self, in_channels, out_channels, kernel_size, perforation_mode: list,
                        grad_conv: bool = True, ):
         return nn.Sequential(
-            PerforatedConv2d(in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1,
-                             perforation_mode=perforation_mode[0], grad_conv=grad_conv),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
-            PerforatedConv2d(out_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1,
-                             perforation_mode=perforation_mode[1], grad_conv=grad_conv),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
+            DownActivUp(in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1,
+                             perforation_mode=perforation_mode[0], grad_conv=grad_conv, activation=
+                        nn.Sequential(nn.BatchNorm2d(out_channels),
+                                      nn.ReLU()))
+            ,
+            DownActivUp(out_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1,
+                             perforation_mode=perforation_mode[1], grad_conv=grad_conv, activation=
+                        nn.Sequential(nn.BatchNorm2d(out_channels),
+                                      nn.ReLU()))
+
         )
 
     def expand_block(self, in_channels, out_channels, kernel_size, perforation_mode: list,
                      grad_conv: bool = True, ):
         return nn.Sequential(
             nn.Upsample(scale_factor=2),
-            PerforatedConv2d(in_channels, out_channels, kernel_size, padding="same", stride=1, dilation=1,
-                             perforation_mode=perforation_mode, grad_conv=grad_conv),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
+            DownActivUp(in_channels, out_channels, kernel_size, padding="same", stride=1, dilation=1,
+                             perforation_mode=perforation_mode, grad_conv=grad_conv, activation=nn.Sequential(nn.BatchNorm2d(out_channels),
+            nn.ReLU())),
+
         )
 
     def _set_perforation(self, perf):
@@ -82,11 +84,11 @@ class UNet(nn.Module):
         for i in self.children():
             if type(i) == torch.nn.Sequential:
                 for j in i:
-                    if type(j) == PerforatedConv2d:
+                    if type(j) in [PerforatedConv2d, DownActivUp]:
                         j.perf_stride = perf[cnt]
                         j.recompute = True
                         cnt += 1
-            elif type(i) == PerforatedConv2d:
+            elif type(i) in [PerforatedConv2d, DownActivUp]:
                 i.perf_stride = perf[cnt]
                 i.recompute = True
                 cnt += 1
@@ -99,9 +101,9 @@ class UNet(nn.Module):
         for i in self.children():
             if type(i) == torch.nn.Sequential:
                 for j in i:
-                    if type(j) == PerforatedConv2d:
+                    if type(j) in [PerforatedConv2d, DownActivUp]:
                         perfs.append(j.perf_stride)
-            elif type(i) == PerforatedConv2d:
+            elif type(i) in [PerforatedConv2d, DownActivUp]:
                 perfs.append(i.perf_stride)
         self.perforation = perfs
         return perfs
@@ -111,9 +113,9 @@ class UNet(nn.Module):
         for i in self.children():
             if type(i) == torch.nn.Sequential:
                 for j in i:
-                    if type(j) == PerforatedConv2d:
+                    if type(j) in [PerforatedConv2d, DownActivUp]:
                         perfs.append(j.calculations)
-            elif type(i) == PerforatedConv2d:
+            elif type(i) in [PerforatedConv2d, DownActivUp]:
                 perfs.append(i.calculations)
         # perfs.append(ll.downsample[0].calculations)
 
