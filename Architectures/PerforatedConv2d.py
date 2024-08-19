@@ -299,7 +299,7 @@ class PerforatedConv2d(nn.Module):
 
 class DownActivUp(nn.Module):
     def __repr__(self):
-        return f"PerforatedConv2d({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride})"
+        return f"DownActivUp({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride}, activ={self.activ.__repr__()})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None, activation=torch.nn.ReLU(),
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
@@ -377,13 +377,15 @@ class DownActivUp(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(out_channels, in_channels // self.groups, self.kernel_size[0], self.kernel_size[1],
                         device=self.device))
+        self.is_bias = False
+        self.bias = None
         if type(bias) == bool:
             self.is_bias = bias
             if bias:
                 self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
             else:
                 self.bias = None
-        else:
+        elif bias is not None:
             self.bias = nn.Parameter(torch.clone(bias))
             self.is_bias = True
 
