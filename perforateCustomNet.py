@@ -71,13 +71,15 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
             replace_activs = True
             cnt = 1
             newActivs = []
+            skipWhile = False
             if len(layers) <= start_n[0] + 1:
                 print("We have reached end of layers array, skipping...")
-                continue
+                skipWhile = True
+
             if verbose:
                 print(submodule, layers[start_n[0]][1])
                 print("found layer", str(layers[start_n[0]][1]),"Looking for shape-preserving layers...")
-            while True:
+            while not skipWhile:
                 if any(map(str(layers[start_n[0] + cnt][1]).__contains__, ["Dropout", "Norm", "ReLU", "ELU",
                                         "Hardshrink", "Hardsigmoid", "Hardtanh", "Hardswish", "Sigmoid", "SiLU", "Mish",
                                           "Softplus", "Softshrink", "Softsign", "Tanh", "Threshold", "GLU"])):
@@ -92,10 +94,15 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
             original = getattr(net, name)
             if verbose:
                 print("Final List of mid-layers:", newActivs)
-            new = DownActivUp(original.in_channels, original.out_channels, original.kernel_size,
+            if not skipWhile:
+                new = DownActivUp(original.in_channels, original.out_channels, original.kernel_size,
                                    original.stride, original.padding, original.dilation, original.groups,
                                    original.bias, original.weight.device, perforation_mode=perforation_mode,
                               activation=torch.nn.Sequential(*newActivs))
+            else:
+                new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
+                                  original.stride, original.padding, original.dilation, original.groups,
+                                  original.bias, original.weight.device, perforation_mode=perforation_mode)
             if verbose:
                 print("New layer:", new)
             if pretrained:
@@ -195,7 +202,9 @@ def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,
     add_functs(net)
     print(net.in_size)
     net._reset()
-def perforate_net_downActivUp(net, from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False, in_size=(1,3,512,512), verbose=False):
+def perforate_net_downActivUp(net, in_size,from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False,  verbose=False):
+    if len(in_size) == 2:
+        in_size = (1,3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)
     replace_module_downActivUp(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained, verbose=verbose)
     add_functs(net)

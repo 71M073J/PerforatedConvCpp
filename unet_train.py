@@ -23,9 +23,10 @@ from segmentation.models.slim_squeeze_unet import (
     SlimSqueezeUNetCofly,
 )
 from segmentation.models.slim_unet import SlimUNet
-from agriadapt.dl_scripts.UNet import UNet as MiniUnet
-from Architectures.UNet import UNet as UNetDownUp
-from perforateCustomNet import perforate_net_perfconv
+from agriadapt.dl_scripts.UNet import UNet
+from Architectures.UNetPerf import UNet as UNetPerf
+from Architectures.UNetDAU import UNet as UNetDAU
+from perforateCustomNet import perforate_net_perfconv, perforate_net_downActivUp
 
 
 class Training:
@@ -46,6 +47,7 @@ class Training:
         dataset="infest",
         continue_model="",  # This is set to model name that we want to continue training with (fresh training if "")
         sample=0,
+            save_model=False, #do we want to save checkpoints
     ):
         self.architecture = architecture
         self.device = device
@@ -62,6 +64,7 @@ class Training:
         self.dataset = dataset
         self.continue_model = continue_model
         self.sample = sample
+        self.save_model = save_model
 
         self.best_fitting = [0, 0, 0, 0]
 
@@ -180,7 +183,7 @@ class Training:
         elif self.learning_rate_scheduler == "cosine":
             return CosineAnnealingLR(
                 optimizer,
-                T_max=150
+                T_max=self.epochs
             )
 
     def train(self):
@@ -250,13 +253,16 @@ class Training:
                 # model = SlimPrunedSqueezeUNet(in_channels, dropout=self.dropout)
             else:
                 if self.architecture == "unet_perf":
-                    model = MiniUnet(out_channels)
+                    model = UNet(out_channels)
                     perforate_net_perfconv(model, perforation_mode=(2,2))
                 elif self.architecture == "unet":
-                    model = MiniUnet(out_channels)
+                    model = UNet(out_channels)
+                elif self.architecture == "unet2":
+                    model = UNetPerf(out_channels, perforation_mode=(2,2))
                     #perforate_net_perfconv(model, perforation_mode=(1,1))
                 elif self.architecture == "unet_downup":
-                    model = UNetDownUp(out_channels, perforation_mode=(2,2))
+                    model = UNet(out_channels)#UNetDAU(out_channels)
+                    perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 else:
                     raise ValueError("Unknown model architecture.")
         else:
@@ -320,7 +326,7 @@ class Training:
             # Only save the model if it is best fitting so far
             # The beginning of the training is quite erratic, therefore, we only consider models from epoch 50 onwards
             if epoch > 50:
-                if self._find_best_fitting(res):
+                if self._find_best_fitting(res) and self.save_model:
                     torch.save(
                         model.state_dict(),
                         garage_path + "model_{}.pt".format(str(epoch).zfill(4)),
@@ -347,44 +353,40 @@ if __name__ == "__main__":
     architecture = "unet_downup"
     architecture = "unet"
     #architecture = "unet_perf"
-    for image_resolution, batch_size in zip(
-        [#(128, 128), (256, 256),
-         (512, 512)],
-        [#2**5, 2**3,
-         2**1
-         ],
-    ):
-        # tr = Training(
-        #     device,
-        #     dataset="geok",
-        #     image_resolution=image_resolution,
-        #     architecture=architecture,
-        #     batch_size=batch_size,
-        # )
-        # tr.train()
-        t0 = time.time()
-        print(image_resolution, batch_size)
-        tr = Training(
-            device,
-            dataset="geok",
-            image_resolution=image_resolution,
-            architecture=architecture,
-            batch_size=batch_size,
-            continue_model="",
-        )
-        tr.train()
-        t1 = time.time()
-        print("perforated training completed in", t1 - t0, "seconds")
-        t0 = time.time()
-        print(image_resolution, batch_size)
-        tr = Training(
-            device,
-            dataset="geok",
-            image_resolution=image_resolution,
-            architecture=architecture+"2",
-            batch_size=batch_size,
-            continue_model="",
-        )
-        tr.train()
-        t1 = time.time()
-        print("perforated training completed in", t1 - t0, "seconds")
+    architectures = ["unet_downup", "unet_perf", "unet2", "unet",]
+    for architecture in architectures:
+        print("--------------------------\n\n")
+        print(architecture)
+        print("\n\n--------------------------")
+
+        for image_resolution, batch_size in zip(
+            [(128, 128),
+             #(256, 256),
+             #(512, 512)
+             ],
+            [2**5,
+             #2**3,
+             #2**1
+             ]
+        ):
+            # tr = Training(
+            #     device,
+            #     dataset="geok",
+            #     image_resolution=image_resolution,
+            #     architecture=architecture,
+            #     batch_size=batch_size,
+            # )
+            # tr.train()
+            t0 = time.time()
+            print(image_resolution, batch_size)
+            tr = Training(
+                device,
+                dataset="geok",
+                image_resolution=image_resolution,
+                architecture=architecture,
+                batch_size=batch_size,
+                continue_model="",
+            )
+            tr.train()
+            t1 = time.time()
+            print("perforated training completed in", t1 - t0, "seconds")
