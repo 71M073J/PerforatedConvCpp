@@ -2,6 +2,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 import time
+
+import matplotlib.pyplot as plt
 import torch
 from torchinfo import summary
 import wandb as wandb
@@ -14,6 +16,10 @@ from ptflops import get_model_complexity_info
 import thop
 import pthflops
 import sys
+import matplotlib
+import cv2
+import random
+import numpy as np
 sys.path.append('/mnt/c/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda/agriadapt')
 import segmentation.settings as settings
 from segmentation.data.data import ImageImporter
@@ -26,6 +32,7 @@ from segmentation.models.slim_unet import SlimUNet
 from agriadapt.dl_scripts.UNet import UNet
 from Architectures.UNetPerf import UNet as UNetPerf
 from Architectures.UNetDAU import UNet as UNetDAU
+from UnetCustom import UNet as UNetCustom
 from perforateCustomNet import perforate_net_perfconv, perforate_net_downActivUp
 
 
@@ -65,6 +72,7 @@ class Training:
         self.continue_model = continue_model
         self.sample = sample
         self.save_model = save_model
+        self.allVals = None
 
         self.best_fitting = [0, 0, 0, 0]
 
@@ -135,6 +143,7 @@ class Training:
 
         Return True if best fitting was found, otherwise false.
         """
+        allVals = metrics
         metrics = [
             #metrics["iou/valid/25/weeds"],
             #metrics["iou/valid/50/weeds"],
@@ -163,6 +172,7 @@ class Training:
         print(f"Current best:      {self.best_fitting}")
         print()
         self.best_fitting = metrics
+        self.allVals = allVals
         return True
 
     def _learning_rate_scheduler(self, optimizer):
@@ -263,6 +273,18 @@ class Training:
                 elif self.architecture == "unet_downup":
                     model = UNet(out_channels)#UNetDAU(out_channels)
                     perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom":
+                    model = UNetCustom(out_channels)
+                    #perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                    #perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom_dau":
+                    model = UNetCustom(out_channels)
+                    perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                    #perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom_perf":
+                    model = UNetCustom(out_channels)
+                    # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                    perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 else:
                     raise ValueError("Unknown model architecture.")
         else:
@@ -303,9 +325,33 @@ class Training:
             model.eval()
             with torch.no_grad():
                 metrics = Metricise(device=self.device)
-                metrics.evaluate(
+                ind_worst, img_worst, ind_best, img_best = metrics.evaluate(
                     model, train_loader, "train", epoch, loss_function=loss_function
                 )
+                #cv2.destroyAllWindows()
+                print(
+                    torch.nn.functional.upsample(train_loader.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]].shape,
+                    torch.tile(torch.nn.functional.upsample(train_loader.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)).shape,
+                    img_worst[0].shape,
+                    img_worst.cpu().detach().numpy().shape)
+                load = train_loader
+                cv2.imshow("Window", torch.cat((
+                                        torch.cat((
+                    torch.nn.functional.upsample(load.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]],
+                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
+                    torch.tile(torch.nn.functional.upsample(img_worst[0].unsqueeze(0).unsqueeze(0), scale_factor=(5,5)).squeeze(), (3, 1, 1)).movedim(0,-1),
+
+                                        ), dim=1),
+                                        torch.cat((
+                    torch.nn.functional.upsample(load.dataset[ind_best][0].unsqueeze(0), scale_factor=(5, 5)).squeeze().movedim(0, -1)[:, :, [1, 2, 0]],
+                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_best][1].unsqueeze(0), scale_factor=(5, 5)).squeeze().movedim(0, -1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
+                    torch.tile(torch.nn.functional.upsample(img_best[0].unsqueeze(0).unsqueeze(0), scale_factor=(5, 5)).squeeze(), (3, 1, 1)).movedim(0, -1),
+
+                                        ), dim=1),
+
+                                    #TODO torch.nn.functional.upsample(...)#TODO
+                                    ),dim=0).numpy())
+                cv2.waitKey(10)
                 metrics.evaluate(
                     model,
                     valid_loader,
@@ -325,12 +371,18 @@ class Training:
             #print(res["valid/100/iou/weeds"])
             # Only save the model if it is best fitting so far
             # The beginning of the training is quite erratic, therefore, we only consider models from epoch 50 onwards
-            if epoch > 50:
-                if self._find_best_fitting(res) and self.save_model:
-                    torch.save(
-                        model.state_dict(),
-                        garage_path + "model_{}.pt".format(str(epoch).zfill(4)),
-                    )
+            if epoch > 50 and epoch % 20 == 0:
+                with open("./outputs_unet.txt", "a") as gg:
+                    print(self.architecture, file=gg)
+                    print("input size:", self.image_resolution)
+                    print(self.allVals, file=gg)
+                    print("\n--------------------------------\n")
+            #if epoch > 50:
+            if self._find_best_fitting(res) and self.save_model:
+                torch.save(
+                    model.state_dict(),
+                    garage_path + "model_{}.pt".format(str(epoch).zfill(4)),
+                )
             if self.verbose and epoch % 10 == 0:
                 print(
                     "Epoch {} completed. Running time: {}".format(
@@ -345,7 +397,12 @@ class Training:
 if __name__ == "__main__":
     # Train on GPU if available
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    import torch
 
+    torch.manual_seed(settings.SEED)
+    random.seed(settings.SEED)
+
+    np.random.seed(settings.SEED)
     # for sample_size in [10, 25, 50, 100]:
     # We need to train the new geok models of different sizes with and without transfer learning from cofly dataset
     # We do this for both sunet and ssunet
@@ -353,7 +410,7 @@ if __name__ == "__main__":
     architecture = "unet_downup"
     architecture = "unet"
     #architecture = "unet_perf"
-    architectures = ["unet_downup", "unet_perf", "unet2", "unet",]
+    architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_downup", "unet_perf", "unet2", "unet",]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)
@@ -361,12 +418,12 @@ if __name__ == "__main__":
 
         for image_resolution, batch_size in zip(
             [(128, 128),
-             #(256, 256),
-             #(512, 512)
+             (256, 256),
+             (512, 512)
              ],
             [2**5,
-             #2**3,
-             #2**1
+             2**3,
+             2**1
              ]
         ):
             # tr = Training(
