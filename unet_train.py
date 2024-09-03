@@ -201,13 +201,27 @@ class Training:
             print("Training process starting...")
             self._report_settings()
         # Prepare the data for training and validation
+
+        from torchvision.transforms import transforms
+        tf = []
+        #tf.extend([transforms.RandomChoice([transforms.RandomCrop(size=32, padding=4),
+        #                                    transforms.RandomResizedCrop(size=32)
+        #                                    ]),
+        #           transforms.RandomHorizontalFlip(), transforms.RandomRotation(degrees=45)])
+        tf.append(transforms.Normalize([0.4837999, 0.3109686, 0.38634193, 0, 0],
+                                       [0.11667825, 0.08259449, 0.09035885, 1, 1]))
+        # tf.append(transforms.Normalize([0.50348324, 0.31018394, 0.39796165],
+        #                               [0.11345574, 0.07511874, 0.08323097]))
+        tf = transforms.Compose(tf)
+        tf = None
         ii = ImageImporter(
             self.dataset,
             validation=True,
             sample=self.sample,
             smaller=self.image_resolution,
         )
-        train, validation = ii.get_dataset()
+
+        train, validation = ii.get_dataset(tf)
         if self.verbose:
             print("Number of training instances: {}".format(len(train)))
             print("Number of validation instances: {}".format(len(validation)))
@@ -329,23 +343,26 @@ class Training:
                     model, train_loader, "train", epoch, loss_function=loss_function
                 )
                 #cv2.destroyAllWindows()
-                print(
-                    torch.nn.functional.upsample(train_loader.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]].shape,
-                    torch.tile(torch.nn.functional.upsample(train_loader.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)).shape,
-                    img_worst[0].shape,
-                    img_worst.cpu().detach().numpy().shape)
+                #print(
+                #    torch.nn.functional.upsample(train_loader.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]].shape,
+                #    torch.tile(torch.nn.functional.upsample(train_loader.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)).shape,
+                #    img_worst[0].shape,
+                #    img_worst.cpu().detach().numpy().shape)
                 load = train_loader
+                sz = load.dataset[ind_best][0].shape[-1]
+                scale = 512/sz
+                scale = (scale, scale)
                 cv2.imshow("Window", torch.cat((
                                         torch.cat((
-                    torch.nn.functional.upsample(load.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]],
-                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
-                    torch.tile(torch.nn.functional.upsample(img_worst[0].unsqueeze(0).unsqueeze(0), scale_factor=(5,5)).squeeze(), (3, 1, 1)).movedim(0,-1),
+                    torch.nn.functional.upsample(load.dataset[ind_worst][0].unsqueeze(0), scale_factor=scale).squeeze().movedim(0,-1)[:, :, [1,2,0]],
+                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_worst][1].unsqueeze(0), scale_factor=scale).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
+                    torch.tile(torch.nn.functional.upsample(img_worst[0].unsqueeze(0).unsqueeze(0), scale_factor=scale).squeeze(), (3, 1, 1)).movedim(0,-1),
 
                                         ), dim=1),
                                         torch.cat((
-                    torch.nn.functional.upsample(load.dataset[ind_best][0].unsqueeze(0), scale_factor=(5, 5)).squeeze().movedim(0, -1)[:, :, [1, 2, 0]],
-                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_best][1].unsqueeze(0), scale_factor=(5, 5)).squeeze().movedim(0, -1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
-                    torch.tile(torch.nn.functional.upsample(img_best[0].unsqueeze(0).unsqueeze(0), scale_factor=(5, 5)).squeeze(), (3, 1, 1)).movedim(0, -1),
+                    torch.nn.functional.upsample(load.dataset[ind_best][0].unsqueeze(0), scale_factor=scale).squeeze().movedim(0, -1)[:, :, [1, 2, 0]],
+                    torch.tile(torch.nn.functional.upsample(load.dataset[ind_best][1].unsqueeze(0), scale_factor=scale).squeeze().movedim(0, -1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
+                    torch.tile(torch.nn.functional.upsample(img_best[0].unsqueeze(0).unsqueeze(0), scale_factor=scale).squeeze(), (3, 1, 1)).movedim(0, -1),
 
                                         ), dim=1),
 
@@ -407,10 +424,9 @@ if __name__ == "__main__":
     # We need to train the new geok models of different sizes with and without transfer learning from cofly dataset
     # We do this for both sunet and ssunet
     # for architecture in ["slim", "squeeze"]:
-    architecture = "unet_downup"
-    architecture = "unet"
     #architecture = "unet_perf"
     architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_downup", "unet_perf", "unet2", "unet",]
+    architectures = ["unet_custom_dau"]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)
