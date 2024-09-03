@@ -168,10 +168,8 @@ class Metricise:
                 pass
         self.results[f"images"] = table
 
-    def report(self, wandb):
+    def report(self):
         self._aggregate_metrics()
-        if wandb and settings.WANDB:
-            wandb.log(self.results)
         return self.results
 
     def _aggregate_metrics(self):

@@ -6,15 +6,15 @@ import time
 import matplotlib.pyplot as plt
 import torch
 from torchinfo import summary
-import wandb as wandb
-from fvcore.nn import FlopCountAnalysis, parameter_count
+#import wandb as wandb
+#from fvcore.nn import FlopCountAnalysis, parameter_count
 from torch import tensor
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LinearLR, ExponentialLR, CosineAnnealingLR
 from torch.utils.data import DataLoader
-from ptflops import get_model_complexity_info
-import thop
-import pthflops
+#from ptflops import get_model_complexity_info
+#import thop
+#import pthflops
 import sys
 import matplotlib
 import cv2
@@ -97,40 +97,40 @@ class Training:
         )
         print("=======================================")
 
-    def _report_model(self, model, input, loader):
-        print("=======================================")
-        for width in self.widths:
-            model.set_width(width)
-            flops = FlopCountAnalysis(model, input)
-            # Flops
-            # Facebook Research
-            # Parameters
-            # Facebook Research
-
-            # https://discuss.pytorch.org/t/how-do-i-check-the-number-of-parameters-of-a-model/4325/8
-            print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-            # https://pypi.org/project/ptflops/
-            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-            print(flops.total(), sum([x for x in parameter_count(model).values()]))
-            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-            print("-----------------------------")
-            print(
-                get_model_complexity_info(
-                    model, (3, 128, 128), print_per_layer_stat=False
-                )
-            )
-            print("-----------------------------")
-            print("*****************************")
-            print(thop.profile(model, (input,)))
-            print("*****************************")
-            print("?????????????????????????????")
-            print(pthflops.count_ops(model, input))
-            print("?????????????????????????????")
-            # print(flops.by_operator())
-            # print(flops.by_module())
-            # print(flops.by_module_and_operator())
-            # print(flop_count_table(flops))
-        print("=======================================")
+#    def _report_model(self, model, input, loader):
+#        print("=======================================")
+#        for width in self.widths:
+#            model.set_width(width)
+#            flops = FlopCountAnalysis(model, input)
+#            # Flops
+#            # Facebook Research
+#            # Parameters
+#            # Facebook Research
+#
+#            # https://discuss.pytorch.org/t/how-do-i-check-the-number-of-parameters-of-a-model/4325/8
+#            print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+#            # https://pypi.org/project/ptflops/
+#            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+#            print(flops.total(), sum([x for x in parameter_count(model).values()]))
+#            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+#            print("-----------------------------")
+#            print(
+#                get_model_complexity_info(
+#                    model, (3, 128, 128), print_per_layer_stat=False
+#                )
+#            )
+#            print("-----------------------------")
+#            print("*****************************")
+#            print(thop.profile(model, (input,)))
+#            print("*****************************")
+#            print("?????????????????????????????")
+#            print(pthflops.count_ops(model, input))
+#            print("?????????????????????????????")
+#            # print(flops.by_operator())
+#            # print(flops.by_module())
+#            # print(flops.by_module_and_operator())
+#            # print(flop_count_table(flops))
+#        print("=======================================")
 
     def _find_best_fitting(self, metrics):
         """
@@ -168,6 +168,7 @@ class Training:
 
         print()
         print("New best scores:")
+        print("All scores:", allVals)
         print(f"Comparing metrics: {metrics}")
         print(f"Current best:      {self.best_fitting}")
         print()
@@ -228,34 +229,6 @@ class Training:
 
         # Wandb report startup
         garage_path = ""
-        if settings.WANDB:
-            run = wandb.init(
-                project="agriadapt",
-                entity="colosal",
-                group=self.wandb_group,
-                config={
-                    "Architecture": self.architecture,
-                    "Batch Size": self.batch_size,
-                    "Epochs": self.epochs,
-                    "Learning Rate": self.learning_rate,
-                    "Learning Rate Scheduler": self.learning_rate_scheduler,
-                    "L2 Regularisation": self.regularisation_l2,
-                    "Image Resolution": self.image_resolution,
-                    "Train Samples": len(train),
-                    "Validation Samples": len(validation),
-                    "Dropout": settings.DROPOUT,
-                    "Dataset": self.dataset,
-                    "Loss Function Weights": settings.LOSS_WEIGHTS,
-                    "Transfer learning": self.continue_model
-                    if self.continue_model
-                    else "None",
-                },
-            )
-            wname = run.name.split("-")
-            garage_path = "garage/runs/{} {} {}/".format(
-                wname[2].zfill(4), wname[0], wname[1]
-            )
-            os.mkdir(garage_path)
 
         train_loader = DataLoader(train, batch_size=self.batch_size, shuffle=True)
         valid_loader = DataLoader(validation, batch_size=self.batch_size, shuffle=False)
@@ -352,7 +325,7 @@ class Training:
                 sz = load.dataset[ind_best][0].shape[-1]
                 scale = 512/sz
                 scale = (scale, scale)
-                cv2.imshow("Window", torch.cat((
+                img = torch.cat((
                                         torch.cat((
                     torch.nn.functional.upsample(load.dataset[ind_worst][0].unsqueeze(0), scale_factor=scale).squeeze().movedim(0,-1)[:, :, [1,2,0]],
                     torch.tile(torch.nn.functional.upsample(load.dataset[ind_worst][1].unsqueeze(0), scale_factor=scale).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)),
@@ -367,7 +340,8 @@ class Training:
                                         ), dim=1),
 
                                     #TODO torch.nn.functional.upsample(...)#TODO
-                                    ),dim=0).numpy())
+                                    ),dim=0).numpy()
+                cv2.imshow("Window", img)
                 cv2.waitKey(10)
                 metrics.evaluate(
                     model,
@@ -377,13 +351,15 @@ class Training:
                     loss_function=loss_function,
                     image_pred=epoch % 50 == 0,
                 )
+                if epoch == settings.EPOCHS - 1:
+                    cv2.imwrite(f"./{self.architecture}.png", img)
             if self.learning_rate_scheduler == "no scheduler":
                 metrics.add_static_value(self.learning_rate, "learning_rate")
             else:
                 metrics.add_static_value(scheduler.get_last_lr(), "learning_rate")
                 scheduler.step()
 
-            res = metrics.report(wandb)
+            res = metrics.report()
             #print(res)
             #print(res["valid/100/iou/weeds"])
             # Only save the model if it is best fitting so far
@@ -406,8 +382,6 @@ class Training:
                         epoch + 1, datetime.now() - s
                     )
                 )
-        if settings.WANDB:
-            wandb.finish()
         torch.save(model.state_dict(), garage_path + "model_final.pt".format(epoch))
 
 

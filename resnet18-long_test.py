@@ -60,36 +60,52 @@ if __name__ == "__main__":
             num_workers=4)
 
 
-    from Architectures.resnet import resnet18
-    from Architectures.mobilenetv3 import mobilenet_v3_small
+    from Architectures.resnet import resnet18 as perfresnet
+    from Architectures.mobilenetv3 import mobilenet_v3_small as perfmobilenetv3
     #from Architectures.mobilenetv3 import mobilenet_v3_large
-    from Architectures.mobilenetv2 import mobilenet_v2
-    for arch, name in [(resnet18, "resnet"), (mobilenet_v3_small, "mobnetv3"), (mobilenet_v2, "mobnetv2")]:
+    from Architectures.mobilenetv2 import mobilenet_v2 as perfmobilenetv2
+    from torchvision.models import resnet18, mobilenet_v2, mobilenet_v3_small
+    from perforateCustomNet import perforate_net_downActivUp as DAU
+    for arch, name in [(perfresnet, "perfresnet"), (perfmobilenetv3, "perfmobnetv3"), (perfmobilenetv2, "perfmobnetv2"),
+                       (resnet18, "DAUresnet"), (mobilenet_v3_small, "DAUmobnetv3"), (mobilenet_v2, "DAUmobnetv2")]:
         for perf in [(1,1),(2,2),(3,3),"random", "2by2_equivalent"]:
             vary_perf=None
             if type(perf) == str:
                 perf = (1,1)
                 vary_perf=perf
             eval_mode = [None, (1,1),(2,2),(3,3)]
-            net = arch(num_classes=10, perforation_mode=perf, grad_conv=True)
-            op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
+            net = None
+            op = None
+            if name.startswith("DAU"):
+                if perf[0] != 2:
+                    continue
+                net = arch(num_classes=10)
+                DAU(net, (32, 32), perforation_mode=perf, pretrained=True)
+                op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
+            else:
+                continue
+                net = arch(num_classes=10, perforation_mode=perf, grad_conv=True)
+                op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
             # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(op, [100, 150, 175], gamma=0.1)
-            op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
-            epochs = 0
+            #op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
             lr_scheduler = None
+            make_imgs = False
+            prefix = "res"
+            epochs = 200
             if type(op) == torch.optim.SGD:
-                epochs = 200
                 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
+                if name.startswith("DAU"):
+                    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=10),
+                                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-10)], milestones=[10])
             else:
                 epochs = 10
                 eval_mode = [None]
+                prefix = "adam_test"
+                make_imgs = True
             #eval_mode=(2,2)
             rs = 0
             perfmode = str(perf[0])+"x"+str(perf[0]) if type(perf[0]) == int else perf
             curr_file = f"{name}_{perfmode}"
-            make_imgs = True
-            prefix = "res"
-            prefix = "adam_test"
             if not os.path.exists(f"./{prefix}/"):
                 os.mkdir(f"./{prefix}")
             print("starting run:", curr_file)

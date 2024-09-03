@@ -153,6 +153,7 @@ def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, 
     class_accs = np.zeros((2, 15))
     weights = []
     net._set_perforation(p)
+    net._reset()
     with ExitStack() as stack:
         if do_profiling:
             prof = stack.enter_context(torch.autograd.profiler.profile(profile_memory=True, use_cuda=True))
@@ -198,9 +199,11 @@ def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, 
                 else:
                     raise ValueError("Only supported vary modes are random and 2by2_equivalent")
                 net._set_perforation(perfs)
+                net._reset()
             batch = batch.to(device)
             t0 = time.time()
             pred = net(batch)
+            #print(pred)
             acc = F.softmax(pred.detach().cpu(), dim=1).argmax(dim=1) == classes
             train_accs.append(torch.sum(acc) / bs)
             torch.cuda.synchronize()
@@ -226,6 +229,8 @@ def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, 
             losses.append(loss.detach().cpu())
             op.step()
             op.zero_grad()
+            #if i == 30:
+            #    quit()
             if i % 100 == 0:
                 if verbose:
                     print("mean entropies:", entropies / (i + 1), file=file)
@@ -319,6 +324,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
 
     if hasattr(net, "perforation"):
         net._set_perforation(train_mode)
+        net._reset()
 
 
 def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run_name="", do_profiling=False,
@@ -415,6 +421,7 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
         net.eval()
         if eval_mode is not None:
             net._set_perforation([eval_mode] * n_conv)
+            net._reset()
         class_accs3 = np.zeros((2, 15))
         l3 = 0
         valid_accs = []
