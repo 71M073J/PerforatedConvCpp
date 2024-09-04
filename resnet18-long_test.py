@@ -77,14 +77,14 @@ if __name__ == "__main__":
             net = None
             op = None
             if name.startswith("DAU"):
-                eval_mode = [None]
-                if perf[0] != 2:
-                    continue
+                #eval_mode = [None]
+                #if perf[0] != 2:
+                #    continue
                 net = arch(num_classes=10)
                 DAU(net, (32, 32), perforation_mode=perf, pretrained=True)
                 op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
             else:
-                continue
+                #continue
                 net = arch(num_classes=10, perforation_mode=perf, grad_conv=True)
                 op = torch.optim.SGD(net.parameters(), momentum=0.9, lr=0.1, weight_decay=0.0005)
             # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(op, [100, 150, 175], gamma=0.1)

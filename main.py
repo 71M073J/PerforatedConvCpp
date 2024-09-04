@@ -321,7 +321,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
                     print("Average Epoch Test Loss:", l2.item() / (i + 1), file=file)
                     print(f"Epoch mean acc: {np.mean(test_accs).item()}", file=file)
                 print("Average Epoch Test Loss:", l2.item() / (i + 1))
-                print(f"Epoch mean acc: {np.mean(test_accs).item()}")
+                print(f"Epoch mean acc: {np.mean(test_accs).item()}", end="")
             ep_test_losses.append(l2.item() / (i + 1))
 
     if hasattr(net, "perforation"):
@@ -417,6 +417,7 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
                         params[ind].append(copy.deepcopy(net.state_dict()))
                 if lr_scheduler is not None:
                     lr_scheduler.step()
+                    print("Current LR:",lr_scheduler.get_last_lr()[0])
         net.train()
     if validate:
         net.load_state_dict(params[0])
