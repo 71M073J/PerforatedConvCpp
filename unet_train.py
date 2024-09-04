@@ -423,7 +423,7 @@ if __name__ == "__main__":
              ]
         )):
             if i > 0 and "dau" in architecture:
-                settings.LEARNING_RATE = 0.0002
+                settings.LEARNING_RATE = 0.005
             else:
                 settings.LEARNING_RATE = 0.001
             # tr = Training(
