@@ -258,7 +258,7 @@ class Training:
                 elif self.architecture == "unet2":
                     model = UNetPerf(out_channels, perforation_mode=(2,2))
                     #perforate_net_perfconv(model, perforation_mode=(1,1))
-                elif self.architecture == "unet_downup":
+                elif self.architecture == "unet_dau":
                     model = UNet(out_channels)#UNetDAU(out_channels)
                     perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom":
@@ -354,7 +354,10 @@ class Training:
                     image_pred=epoch % 50 == 0,
                 )
                 if epoch == settings.EPOCHS - 1:
-                    cv2.imwrite(f"./{self.architecture}.png", img)
+                    plt.imshow(img)
+                    plt.savefig(f"./{self.architecture}.png")
+                    plt.clf()
+                    plt.cla()
             if self.learning_rate_scheduler == "no scheduler":
                 metrics.add_static_value(self.learning_rate, "learning_rate")
             else:
@@ -401,14 +404,14 @@ if __name__ == "__main__":
     # We do this for both sunet and ssunet
     # for architecture in ["slim", "squeeze"]:
     #architecture = "unet_perf"
-    architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_downup", "unet_perf", "unet2", "unet",]
+    architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_dau", "unet_perf", "unet2", "unet",]
     architectures = ["unet_custom_dau"]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)
         print("\n\n--------------------------")
 
-        for image_resolution, batch_size in zip(
+        for i, (image_resolution, batch_size) in enumerate(zip(
             [(128, 128),
              (256, 256),
              (512, 512)
@@ -417,7 +420,9 @@ if __name__ == "__main__":
              2**3,
              2**1
              ]
-        ):
+        )):
+            if i > 0 and "dau" in architecture:
+                settings.LEARNING_RATE = 0.0002
             # tr = Training(
             #     device,
             #     dataset="geok",
