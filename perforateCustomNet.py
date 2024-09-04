@@ -109,7 +109,10 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                 print(pretrained, submodule, name)
                 with torch.no_grad():
                     new.weight = torch.nn.Parameter(torch.clone(original.weight))
-                    if original.bias:
+                    if type(original.bias) == bool:
+                        if original.bias:
+                            new.bias = torch.nn.Parameter(torch.clone(original.bias))
+                    elif hasattr(original.bias, "shape"):
                         new.bias = torch.nn.Parameter(torch.clone(original.bias))
             setattr(net, name, new)
             start_n[0] += 1
