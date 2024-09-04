@@ -95,11 +95,11 @@ if __name__ == "__main__":
             epochs = 200
             if type(op) == torch.optim.SGD:
                 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
-                if name.startswith("DAU"):
-                    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.0001, total_iters=2),
-                                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
-                                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
-                                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-2)], milestones=[2])
+                #if name.startswith("DAU"):
+                #    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.0001, total_iters=2),
+                #                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
+                #                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
+                #                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-2)], milestones=[2])
             else:
                 epochs = 10
                 eval_mode = [None]
@@ -122,7 +122,7 @@ if __name__ == "__main__":
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
                          lr_scheduler=lr_scheduler, validate=False if data == "cifar" else True,
-                                   grad_clip=100 if name.startswith("DAU") else None)
+                                   grad_clip=10 if name.startswith("DAU") else None)
                 print(results)
                 t1 = time.time()
                 print(t1 - t_0, "Seconds elapsed for network", curr_file)
