@@ -404,8 +404,8 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
                     minacc = [1000.] * len(eval_mode)
                 for ind, ev in enumerate(eval_mode):
 
-                    print("testing eval mode", ev)
-                    print("testing eval mode", ev, file=file)
+                    print("\ntesting eval mode", ev)
+                    print("\ntesting eval mode", ev, file=file)
                     test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses[ind], verbose, file,
                          testitems, report_class_accs, ep_test_losses[ind], ev, net, dataset2, bs, reporting,
                          test_accs[ind])
@@ -417,7 +417,7 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
                         params[ind].append(copy.deepcopy(net.state_dict()))
                 if lr_scheduler is not None:
                     lr_scheduler.step()
-                    print("Current LR:",lr_scheduler.get_last_lr()[0])
+                    print(", Current LR:",lr_scheduler.get_last_lr()[0])
         net.train()
     if validate:
         net.load_state_dict(params[0])
