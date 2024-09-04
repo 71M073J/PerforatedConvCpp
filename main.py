@@ -145,7 +145,7 @@ def compare_speed():
 
 
 def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, op, verbose, file, items, epoch,
-          ep_losses, vary_perf, eval_mode, net, bs, run_name, reporting, vary_num):
+          ep_losses, vary_perf, eval_mode, net, bs, run_name, reporting, vary_num, grad_clip):
     l = 0
     train_accs = []
     entropies = 0
@@ -227,6 +227,8 @@ def train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, 
                 class_accs[1, clas] += 1
             l += loss.detach().cpu()
             losses.append(loss.detach().cpu())
+            if grad_clip is not None:
+                torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
             op.step()
             op.zero_grad()
             #if i == 30:
@@ -330,7 +332,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
 def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run_name="", do_profiling=False,
              make_imgs=False, test_every_n=1, plot_loss=False, report_class_accs=False, vary_perf=None, eval_mode=None,
              file=None, dataset=None, dataset2=None, dataset3=None, op=None, lr_scheduler=None, validate=None,
-             do_test=True, save_net=False, reporting=True, vary_num=2, device: Union[str, torch.device] = "cpu"):
+             do_test=True, save_net=False, reporting=True, vary_num=2, device: Union[str, torch.device] = "cpu", grad_clip=None):
     if vary_perf is not None:
         try:
             vary_num = net.perforation[0][0]
@@ -375,7 +377,7 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
     minacc = 1000
     for epoch in range(n_epochs):
         train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, op, verbose, file, items, epoch,
-              ep_losses, vary_perf, eval_mode, net, bs, run_name, reporting, vary_num)
+              ep_losses, vary_perf, eval_mode, net, bs, run_name, reporting, vary_num, grad_clip)
 
         if type(eval_mode) == tuple:
             if do_test or plot_loss:

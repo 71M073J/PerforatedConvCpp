@@ -121,7 +121,8 @@ if __name__ == "__main__":
                          make_imgs=make_imgs, plot_loss=False, vary_perf=vary_perf,
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
-                         lr_scheduler=lr_scheduler, validate=False if data == "cifar" else True)
+                         lr_scheduler=lr_scheduler, validate=False if data == "cifar" else True,
+                                   grad_clip=100 if name.startswith("DAU") else None)
                 print(results)
                 t1 = time.time()
                 print(t1 - t_0, "Seconds elapsed for network", curr_file)
