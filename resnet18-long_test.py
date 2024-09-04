@@ -95,11 +95,11 @@ if __name__ == "__main__":
             epochs = 200
             if type(op) == torch.optim.SGD:
                 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
-                #if name.startswith("DAU"):
-                #    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.0001, total_iters=2),
-                #                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
-                #                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
-                #                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-2)], milestones=[2])
+                if name.startswith("DAU"):
+                    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.0001, total_iters=1),
+                                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
+                                      #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
+                                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-1)], milestones=[1])
             else:
                 epochs = 10
                 eval_mode = [None]
