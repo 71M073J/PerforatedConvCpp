@@ -423,10 +423,10 @@ if __name__ == "__main__":
             [2**5, 2**3, 2**1] if extrapath.startswith("/mnt/") else [2**6, 2**5, 2**3]
         )):
             lr = 0
-            if i > 0 and "dau" in architecture:
-                lr = 0.0001
-            else:
+            if i == 0 and "dau" not in architecture:
                 lr = 0.001
+            else:
+                lr = 0.0002
             # tr = Training(
             #     device,
             #     dataset="geok",
