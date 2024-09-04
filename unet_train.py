@@ -356,7 +356,7 @@ class Training:
                 if epoch == settings.EPOCHS - 1:
                     dirname = "unet_imgs"
                     if not os.path.isdir(f"./{dirname}"):
-                        os.mkdir("./{dirname}")
+                        os.mkdir(f"./{dirname}")
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     plt.imshow(img)
                     plt.savefig(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.png")
