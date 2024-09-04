@@ -425,10 +425,11 @@ if __name__ == "__main__":
              2**1
              ]
         )):
-            if i > 0 and "dau" in architecture and False:
-                settings.LEARNING_RATE = 0.005
+            lr = 0
+            if i > 0 and ("dau" in architecture) and False:
+                lr = 0.005
             else:
-                settings.LEARNING_RATE = 0.01
+                lr = 0.01
             # tr = Training(
             #     device,
             #     dataset="geok",
@@ -446,6 +447,7 @@ if __name__ == "__main__":
                 architecture=architecture,
                 batch_size=batch_size,
                 continue_model="",
+                learning_rate=lr,
             )
             tr.train()
             t1 = time.time()
