@@ -420,14 +420,11 @@ if __name__ == "__main__":
              (256, 256),
              (512, 512)
              ],
-            [2**5,
-             2**3,
-             2**1
-             ]
+            [2**5, 2**3, 2**1] if extrapath.startswith("/mnt/") else [2**6, 2**5, 2**3]
         )):
             lr = 0
             if i > 0 and "dau" in architecture:
-                lr = 0.0002
+                lr = 0.0001
             else:
                 lr = 0.001
             # tr = Training(
