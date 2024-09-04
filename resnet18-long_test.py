@@ -77,6 +77,7 @@ if __name__ == "__main__":
             net = None
             op = None
             if name.startswith("DAU"):
+                eval_mode = [None]
                 if perf[0] != 2:
                     continue
                 net = arch(num_classes=10)
@@ -95,8 +96,8 @@ if __name__ == "__main__":
             if type(op) == torch.optim.SGD:
                 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
                 if name.startswith("DAU"):
-                    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=10),
-                                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-10)], milestones=[10])
+                    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=2),
+                                                                              torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs-2)], milestones=[2])
             else:
                 epochs = 10
                 eval_mode = [None]
@@ -114,7 +115,7 @@ if __name__ == "__main__":
                 continue
             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                 t_0 = time.time()
-                results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=False, summarise=False, verbose=False,
+                results = test_net(net, batch_size=bs, epochs=epochs, do_profiling=False, summarise=True, verbose=False,
                          make_imgs=make_imgs, plot_loss=False, vary_perf=vary_perf,
                          file=f, eval_mode=eval_mode,device="cuda",
                          run_name=curr_file, dataset=dataset1, dataset2=dataset2, dataset3=dataset3, op=op,
