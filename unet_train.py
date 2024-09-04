@@ -354,9 +354,12 @@ class Training:
                     image_pred=epoch % 50 == 0,
                 )
                 if epoch == settings.EPOCHS - 1:
+                    dirname = "unet_imgs"
+                    if not os.path.isdir(f"./{dirname}"):
+                        os.mkdir("./{dirname}")
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     plt.imshow(img)
-                    plt.savefig(f"./{self.architecture}.png")
+                    plt.savefig(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.png")
                     plt.clf()
                     plt.cla()
             if self.learning_rate_scheduler == "no scheduler":
@@ -422,10 +425,10 @@ if __name__ == "__main__":
              2**1
              ]
         )):
-            if i > 0 and "dau" in architecture:
+            if i > 0 and "dau" in architecture and False:
                 settings.LEARNING_RATE = 0.005
             else:
-                settings.LEARNING_RATE = 0.001
+                settings.LEARNING_RATE = 0.01
             # tr = Training(
             #     device,
             #     dataset="geok",
