@@ -406,7 +406,7 @@ if __name__ == "__main__":
     # for architecture in ["slim", "squeeze"]:
     #architecture = "unet_perf"
     architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_dau", "unet_perf", "unet2", "unet",]
-    architectures = ["unet_custom_dau"]
+    #architectures = ["unet_custom_dau"]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)
@@ -424,6 +424,8 @@ if __name__ == "__main__":
         )):
             if i > 0 and "dau" in architecture:
                 settings.LEARNING_RATE = 0.0002
+            else:
+                settings.LEARNING_RATE = 0.001
             # tr = Training(
             #     device,
             #     dataset="geok",
