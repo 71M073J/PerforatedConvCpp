@@ -20,7 +20,8 @@ import matplotlib
 import cv2
 import random
 import numpy as np
-sys.path.append('/mnt/c/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda/agriadapt')
+extrapath = '/mnt/c/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda/agriadapt'
+sys.path.append(extrapath)
 import segmentation.settings as settings
 from segmentation.data.data import ImageImporter
 from segmentation.helpers.metricise import Metricise
@@ -341,8 +342,9 @@ class Training:
 
                                     #TODO torch.nn.functional.upsample(...)#TODO
                                     ),dim=0).numpy()
-                cv2.imshow("Window", img)
-                cv2.waitKey(10)
+                if extrapath.startswith("/mnt"):
+                    cv2.imshow("Window", img)
+                    cv2.waitKey(10)
                 metrics.evaluate(
                     model,
                     valid_loader,
