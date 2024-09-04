@@ -354,6 +354,7 @@ class Training:
                     image_pred=epoch % 50 == 0,
                 )
                 if epoch == settings.EPOCHS - 1:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     plt.imshow(img)
                     plt.savefig(f"./{self.architecture}.png")
                     plt.clf()
