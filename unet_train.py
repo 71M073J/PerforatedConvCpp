@@ -173,6 +173,7 @@ class Training:
         print(f"Comparing metrics: {metrics}")
         print(f"Current best:      {self.best_fitting}")
         print()
+
         self.best_fitting = metrics
         self.allVals = allVals
         return True
@@ -362,6 +363,8 @@ class Training:
                     plt.savefig(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.png")
                     plt.clf()
                     plt.cla()
+                    with open(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.txt", "w") as ff:
+                        print(metrics.best_fitting, metrics.allVals, file=ff)
             if self.learning_rate_scheduler == "no scheduler":
                 metrics.add_static_value(self.learning_rate, "learning_rate")
             else:
