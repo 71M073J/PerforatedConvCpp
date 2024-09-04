@@ -426,10 +426,10 @@ if __name__ == "__main__":
              ]
         )):
             lr = 0
-            if i > 0 and ("dau" in architecture) and False:
-                lr = 0.005
+            if i > 0 and "dau" in architecture:
+                lr = 0.0002
             else:
-                lr = 0.01
+                lr = 0.001
             # tr = Training(
             #     device,
             #     dataset="geok",
