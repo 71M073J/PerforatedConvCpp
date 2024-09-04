@@ -293,7 +293,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
                 else:
                     net._set_perforation(eval_mode)
                 net._reset()
-                print(net._get_perforation())
+                #print(net._get_perforation())
             class_accs = np.zeros((2, 15))
             l2 = 0
             for i, (batch, classes) in enumerate(dataset2):
@@ -321,7 +321,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
                     print("Average Epoch Test Loss:", l2.item() / (i + 1), file=file)
                     print(f"Epoch mean acc: {np.mean(test_accs).item()}", file=file)
                 print("Average Epoch Test Loss:", l2.item() / (i + 1))
-                print(f"Epoch mean acc: {np.mean(test_accs).item()}", end="")
+                print(f"Epoch mean acc: {np.mean(test_accs).item()}", end=", ")
             ep_test_losses.append(l2.item() / (i + 1))
 
     if hasattr(net, "perforation"):
