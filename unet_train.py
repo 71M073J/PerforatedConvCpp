@@ -364,7 +364,7 @@ class Training:
                     plt.clf()
                     plt.cla()
                     with open(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.txt", "w") as ff:
-                        print(metrics.best_fitting, metrics.allVals, file=ff)
+                        print(self.best_fitting, self.allVals, file=ff)
             if self.learning_rate_scheduler == "no scheduler":
                 metrics.add_static_value(self.learning_rate, "learning_rate")
             else:
