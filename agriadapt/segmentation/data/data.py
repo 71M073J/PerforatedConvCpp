@@ -1,13 +1,18 @@
 import os
 import random
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import torch
 import cv2
-from torch import Generator, tensor, argmax, ones, zeros, cat, unique
+from numpy import floor, ceil
+from sklearn.model_selection import train_test_split
+from torch import Generator, tensor, argmax, ones, zeros, cat, unique, flatten
 from torch.utils.data import Dataset, random_split
 from torchvision import transforms
+from shapely import Polygon, Point
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -17,21 +22,16 @@ import segmentation.settings as settings
 
 
 class ImageDataset(Dataset):
-    def __init__(self, X, y, transform=None):
+    def __init__(self, X, y):
         self.X = X
         self.y = y
-        self.transform = transform
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, item):
-        if self.transform:
-            #print(self.X[item].shape, self.y[item].shape)
-            h = self.transform(torch.cat((self.X[item], self.y[item])))
-            return h[:3], h[3:]
-        else:
-            return self.X[item], self.y[item]
+        return self.X[item], self.y[item]
+
 
 class ImageImporter:
     def __init__(
@@ -40,10 +40,19 @@ class ImageImporter:
         sample=False,
         validation=False,
         smaller=False,
+        only_training=False,
         only_test=False,
+        tobacco_i=0,
         augmentations=None,
     ):
-        assert dataset in ["agriadapt", "cofly", "infest", "geok"]
+        assert dataset in [
+            "bigagriadapt",
+            "agriadapt",
+            "cofly",
+            "infest",
+            "geok",
+            "tobacco",
+        ]
         self._dataset = dataset
         # Reduced number of random images in training if set.
         self.sample = sample
@@ -51,20 +60,34 @@ class ImageImporter:
         self.validation = validation
         # Make the images smaller
         self.smaller = smaller
-        # Only return the test dataset (first part of returned tuple empty)
+        # Only return the train dataset (second part of the returned tuple is empty)
+        self.only_training = only_training
+        # Only return the valid/test dataset (first part of the returned tuple is empty)
         self.only_test = only_test
+        # Only used for the tobacco dataset. It denotes which of the fields is used as validation/testing.
+        self.tobacco_i = tobacco_i
 
         self.project_path = Path(settings.PROJECT_DIR)
 
-    def get_dataset(self, tf=None):
+    def get_dataset(self):
+        if self._dataset == "bigagriadapt":
+            return self._get_geok(data_dir="segmentation/data/big_agriadapt/")
         if self._dataset == "agriadapt":
-            return self._get_agriadapt()
+            # This is deprecated as it was later incorporated elsewhere.
+            # return self._get_agriadapt()
+            # This one is only the new dataset (the "agriadapt" part of the bigagriadapt set)
+            return self._get_geok(data_dir="segmentation/data/agriadapt/")
         elif self._dataset == "cofly":
             return self._get_cofly()
         elif self._dataset == "infest":
             return self._get_infest()
         elif self._dataset == "geok":
-            return self._get_geok(tf)
+            return self._get_geok()
+        elif self._dataset == "tobacco":
+            return self._get_tobacco()
+
+    def _get_bigagriadapt(self):
+        return self._get_geok()
 
     def _get_agriadapt(self):
         """
@@ -260,68 +283,65 @@ class ImageImporter:
                 img = smaller(img)
             tens = create_tensor(img)
             X.append(tens)
-            image_width = tens.shape[1]
-            image_height = tens.shape[2]
+            if not os.path.isdir(self.project_path / data_dir / split / "labels"):
+                os.mkdir(self.project_path / data_dir / split / "labels")
+            if not os.path.isfile(self.project_path / data_dir / split / "labels/" / file_name):
 
-            # Constructing the segmentation mask
-            # We init the whole tensor as background
-            # TODO: if we do transfer learning from cofly, we need the background and weeds masks (no lettuce)
-            # That means that we have 1 as the first argument of zeros (as we only have weeds -- no lettuce)
-            mask = cat(
-                (
-                    ones(1, image_width, image_height),
-                    zeros(2, image_width, image_height),
-                ),
-                0,
-            )
-            # Then, label by label, add to other classes and remove from background.
-            file_name = file_name[:-3] + "txt"
-            with open(
-                self.project_path / data_dir / split / "labels/" / file_name
-            ) as rows:
-                labels = [row.rstrip() for row in rows]
-                for label in labels:
-                    class_id, pixels = self._yolov7_label(
-                        label, image_width, image_height
-                    )
-                    if class_id > 1:
-                        continue
-                    # TODO: another thing to keep in mind with transfer learning from cofly
-                    # Change values based on received pixels
-                    print(class_id)
-                    for pixel in pixels:
-                        mask[0][pixel[0]][pixel[1]] = 0
-                        mask[class_id][pixel[0]][pixel[1]] = 1
-            y.append(mask)
+                image_width = tens.shape[1]
+                image_height = tens.shape[2]
+
+                # Constructing the segmentation mask
+                # We init the whole tensor as background
+                # TODO: if we do transfer learning from cofly, we need the background and weeds masks (no lettuce)
+                # That means that we have 1 as the first argument of zeros (as we only have weeds -- no lettuce)
+                mask = cat(
+                    (
+                        ones(1, image_width, image_height),
+                        zeros(2, image_width, image_height),
+                    ),
+                    0,
+                )
+                # Then, label by label, add to other classes and remove from background.
+                file_name = file_name[:-3] + "txt"
+                with open(
+                    self.project_path / data_dir / split / "labels/" / file_name
+                ) as rows:
+                    labels = [row.rstrip() for row in rows]
+                    for label in labels:
+                        class_id, pixels = self._yolov7_label(
+                            label, image_width, image_height
+                        )
+                        if class_id > 1:
+                            continue
+                        # TODO: another thing to keep in mind with transfer learning from cofly
+                        # Change values based on received pixels
+                        print(class_id)
+                        for pixel in pixels:
+                            mask[0][pixel[0]][pixel[1]] = 0
+                            mask[class_id][pixel[0]][pixel[1]] = 1
+                y.append(mask)
+
 
         return ImageDataset(X, y)
 
-    def _get_geok(self, tf=None):
+    def _get_geok(self, data_dir="segmentation/data/geok/"):
         """
-        This takes the same approach as the infest dataset, but from a different directory.
-        mask[0] -> background
-        mask[1] -> weeds
-        mask[2] -> lettuce
+        Retrieve the geok dataset with background and weeds labels.
         """
-        data_dir = "segmentation/data/geok/"
-        if self.validation:
-            return self._fetch_geok_split(
-                split="train", data_dir=data_dir, tf=tf
-            ), self._fetch_geok_split(split="valid", data_dir=data_dir, tf=tf)
-        if self.only_test:
-            return None, self._fetch_geok_split(split="valid", data_dir=data_dir, tf=tf)
+        test_set_name = "valid" if self.validation else "test"
+        if self.only_training:
+            return self._fetch_geok_split(split="train", data_dir=data_dir), None
+        elif self.only_test:
+            return None, self._fetch_geok_split(split=test_set_name, data_dir=data_dir)
         else:
-            if self.only_test:
-                return None, self._fetch_geok_split(split="test", data_dir=data_dir, tf=tf)
-            else:
-                return self._fetch_geok_split(
-                    split="train", data_dir=data_dir
-                ), self._fetch_geok_split(split="test", data_dir=data_dir, tf=tf)
+            return self._fetch_geok_split(
+                split="train", data_dir=data_dir
+            ), self._fetch_geok_split(split=test_set_name, data_dir=data_dir)
 
     def _fetch_geok_split(
         self,
         data_dir,
-        split,tf
+        split,
     ):
         images = sorted(os.listdir(self.project_path / data_dir / split / "images/"))
         create_tensor = transforms.ToTensor()
@@ -330,7 +350,7 @@ class ImageImporter:
         if self.sample and split == "train":
             images = random.sample(images, self.sample)
 
-        for file_name in images:
+        for i, file_name in enumerate(images):
             img = Image.open(
                 self.project_path / data_dir / split / "images/" / file_name
             )
@@ -339,38 +359,51 @@ class ImageImporter:
                 img = smaller(img)
             tens = create_tensor(img)
             X.append(tens)
-            image_width = tens.shape[1]
-            image_height = tens.shape[2]
+            sizes = "512_512" if not self.smaller else f"{self.smaller[0]}_{self.smaller[1]}"
+            if not os.path.isdir(self.project_path / data_dir / split / "labels"):
+                os.mkdir(self.project_path / data_dir / split / "labels")
+            if not os.path.isfile(self.project_path / data_dir / split / f"labels/{i}_{sizes}.label"):
 
-            # Constructing the segmentation mask
-            # We init the whole tensor as background
-            # That means that we have 1 as the first argument of zeros (as we only have weeds -- no lettuce)
-            mask = cat(
-                (
-                    ones(1, image_width, image_height),
-                    zeros(1, image_width, image_height),
-                ),
-                0,
-            )
-            # Then, label by label, add to other classes and remove from background.
-            file_name = file_name[:-3] + "txt"
-            with open(
-                self.project_path / data_dir / split / "labels/" / file_name
-            ) as rows:
-                labels = [row.rstrip() for row in rows]
-                for label in labels:
-                    class_id, pixels = self._yolov7_label(
-                        label, image_width, image_height
-                    )
-                    if class_id == 1:
-                        continue
-                    class_id -= 1
-                    for pixel in pixels:
-                        mask[0][pixel[0]][pixel[1]] = 0
-                        mask[class_id][pixel[0]][pixel[1]] = 1
-            y.append(mask)
+                image_width = tens.shape[1]
+                image_height = tens.shape[2]
 
-        return ImageDataset(X, y, tf)
+                # Constructing the segmentation mask
+                # We init the whole tensor as background
+                # That means that we have 1 as the first argument of zeros (as we only have weeds -- no lettuce)
+                mask = cat(
+                    (
+                        ones(1, image_width, image_height),
+                        zeros(1, image_width, image_height),
+                    ),
+                    0,
+                )
+                # Then, label by label, add to other classes and remove from background.
+                file_name = file_name[:-3] + "txt"
+                with open(
+                    self.project_path / data_dir / split / "labels/" / file_name
+                ) as rows:
+                    labels = [row.rstrip() for row in rows]
+                    for label in labels:
+                        class_id, pixels = self._yolov7_label(
+                            label, image_width, image_height
+                        )
+                        if not pixels:
+                            continue
+                        for pixel in pixels:
+                            mask[0][pixel[0]][pixel[1]] = 0
+                            mask[class_id][pixel[0]][pixel[1]] = 1
+
+                y.append(mask)
+                if self.smaller:
+                    smaller = transforms.Resize(self.smaller)
+                    torch.save(smaller(mask), self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
+                else:
+                    torch.save(mask, self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
+
+            else:
+                y.append(torch.load(self.project_path / data_dir / split / f"labels/{i}_{sizes}.label"))
+
+        return ImageDataset(X, y)
 
     def _yolov7_label(self, label, image_width, image_height):
         """
@@ -378,47 +411,184 @@ class ImageImporter:
         https://roboflow.com/formats/yolov7-pytorch-txt
         """
         # Deconstruct a row
-        class_id, center_x, center_y, width, height = [
-            float(x) for x in label.split(" ")
+
+        label = label.split(" ")
+        # We consider lettuce as the background, so we skip lettuce label extraction (for now at least).
+        if label[0] == "0":
+            return None, None
+        # Some labels are in a rectangle format, while others are presented as polygons... great fun.
+        # Rectangles
+        if len(label) == 5:
+            class_id, center_x, center_y, width, height = [float(x) for x in label]
+
+            # Get center pixel
+            center_x = center_x * image_width
+            center_y = center_y * image_height
+
+            # Get border pixels
+            top_border = int(center_x - (width / 2 * image_width))
+            bottom_border = int(center_x + (width / 2 * image_width))
+            left_border = int(center_y - (height / 2 * image_height))
+            right_border = int(center_y + (height / 2 * image_height))
+
+            # Generate pixels
+            pixels = []
+            for x in range(left_border, right_border):
+                for y in range(top_border, bottom_border):
+                    pixels.append((x, y))
+        # Polygons
+        else:
+            class_id = label[0]
+            # Create a polygon object
+            points = [
+                (float(label[i]) * image_width, float(label[i + 1]) * image_height)
+                for i in range(1, len(label), 2)
+            ]
+            poly = Polygon(points)
+            # We limit the area in which we search for points to make the process a tiny bit faster.
+            pixels = []
+            for x in range(
+                int(floor(min([x[1] for x in points]))),
+                int(ceil(max([x[1] for x in points]))),
+            ):
+                for y in range(
+                    int(floor(min([x[0] for x in points]))),
+                    int(ceil(max([x[0] for x in points]))),
+                ):
+                    if Point(y, x).within(poly):
+                        pixels.append((x, y))
+
+        return int(class_id), pixels
+
+    def _get_tobacco(self):
+        field_directory = (
+            self.project_path
+            / "segmentation/data/tobacco/Tobacco Aerial Dataset V1/Ready for traintest tobacco data 352x480"
+        )
+        fields = [
+            "119",
+            "120/test/RGB",
+            "133/test/RGB",
+            "134/test/RGB",
+            "147",
+            "154/test/RGB",
+            "163/test/RGB",
+            "171/test/RGB",
         ]
 
-        # Get center pixel
-        center_x = center_x * image_width
-        center_y = center_y * image_height
+        X, y = self._fetch_tobacco_split(
+            field_directory / fields[self.tobacco_i], [], []
+        )
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, random_state=42, train_size=0.8
+        )
 
-        # Get border pixels
-        top_border = int(center_x - (width / 2 * image_width))
-        bottom_border = int(center_x + (width / 2 * image_width))
-        left_border = int(center_y - (height / 2 * image_height))
-        right_border = int(center_y + (height / 2 * image_height))
+        return ImageDataset(X_train, y_train), ImageDataset(X_test, y_test)
 
-        # Generate pixels
-        pixels = []
-        for x in range(left_border, right_border):
-            for y in range(top_border, bottom_border):
-                pixels.append((x, y))
+    def _get_tobacco_per_field(self):
+        """
+        Retrieve data from all tobacco fields. One field is used as a test, others to train the models.
+        """
+        field_directory = (
+            self.project_path
+            / "segmentation/data/tobacco/Tobacco Aerial Dataset V1/Ready for traintest tobacco data 352x480"
+        )
+        fields = [
+            "119",
+            "120/test/RGB",
+            "133/test/RGB",
+            "134/test/RGB",
+            "147",
+            "154/test/RGB",
+            "163/test/RGB",
+            "171/test/RGB",
+        ]
+        if not self.only_test:
+            X_train, y_train = [], []
+            for i, field in enumerate(fields):
+                if i == self.tobacco_i:
+                    continue
+                self._fetch_tobacco_split(field_directory / field, X_train, y_train)
+            train = ImageDataset(X_train, y_train)
+        else:
+            train = None
 
-        return int(class_id + 1), pixels
+        X_test, y_test = self._fetch_tobacco_split(
+            field_directory / fields[self.tobacco_i], [], []
+        )
+        test = ImageDataset(X_test, y_test)
+
+        return train, test
+
+    def _fetch_tobacco_split(self, dir, X, y):
+        img_dir = dir / "data"
+        mask_dir = dir / "maskref"
+        images = sorted(
+            os.listdir(
+                img_dir,
+            )
+        )
+        if self.sample:
+            images = random.sample(images, self.sample)
+        masks = sorted(os.listdir(mask_dir))
+        create_tensor = transforms.ToTensor()
+        for image, mask in zip(images, masks):
+            if image != mask and not self.sample:
+                raise ValueError("Image and mask name do not match.")
+            img = create_tensor(Image.open(img_dir / image))
+            # We get values 0, 127, and 256. We transform them to 0, 1, 2 (background, tobacco, weeds)
+            msk = torch.round(create_tensor(Image.open(mask_dir / image)) * 2)
+            if self.smaller:
+                smaller = transforms.Resize(self.smaller)
+                img = smaller(img)
+                # Have to round again, as this is technically an image.
+                msk = torch.round(smaller(msk))
+            msk = self._construct_tobacco_mask(msk)
+            X.append(img)
+            y.append(msk)
+        return X, y
+
+    def _construct_tobacco_mask(self, mask_class):
+        """
+        We have three different classes -> background (0), tobacco (1), and weeds (2).
+        Therefore, we need to construct a 3-channel binary mask for each class category.
+        Alternatively we can only create a 2-channel one, counting tobacco as the background (this is currently implemented).
+        """
+        width, height = mask_class.shape[1:3]
+        mask = cat(
+            (
+                ones(1, width, height),
+                zeros(1, width, height),
+            ),
+            0,
+        )
+        # Then, label by label, add to other classes and remove from background.
+        for x in range(width):
+            for y in range(height):
+                if mask_class[0][x][y] == 2:
+                    mask[0][x][y] = 0
+                    mask[1][x][y] = 1
+        return mask
 
 
 if __name__ == "__main__":
-    ii = ImageImporter("geok", smaller=(256, 256))
+    ii = ImageImporter("geok", sample=1, smaller=(512, 512), only_training=True)
     train, test = ii.get_dataset()
-    print(len(train))
-    print(len(test))
 
     for X, y in iter(train):
-        # X, y = next(iter(train))
         x_mask = torch.tensor(torch.mul(X, 255), dtype=torch.uint8)
-        lettuce_mask = torch.tensor(y, dtype=torch.bool)
+        weeds_mask = torch.tensor(y[1], dtype=torch.bool)
         image = draw_segmentation_masks(
             x_mask,
-            lettuce_mask,
-            colors=["green", "red"],
+            weeds_mask,
+            colors=["red"],
             alpha=0.5,
         )
+        # plt.imshow(X.permute(1, 2, 0))
+        # plt.show()
         plt.imshow(image.permute(1, 2, 0))
         plt.show()
+        0 / 0
 
     # ii = ImageImporter("cofly")
     # train, test = ii.get_dataset()

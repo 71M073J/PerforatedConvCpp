@@ -9,7 +9,7 @@ from torchinfo import summary
 #import wandb as wandb
 #from fvcore.nn import FlopCountAnalysis, parameter_count
 from torch import tensor
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import LinearLR, ExponentialLR, CosineAnnealingLR
 from torch.utils.data import DataLoader
 #from ptflops import get_model_complexity_info
@@ -52,10 +52,11 @@ class Training:
         dropout=settings.DROPOUT,
         verbose=1,
         wandb_group=None,
-        dataset="infest",
+        dataset="geok",
         continue_model="",  # This is set to model name that we want to continue training with (fresh training if "")
         sample=0,
-            save_model=False, #do we want to save checkpoints
+        tobacco_i=0,
+        opt="Adam"
     ):
         self.architecture = architecture
         self.device = device
@@ -72,10 +73,10 @@ class Training:
         self.dataset = dataset
         self.continue_model = continue_model
         self.sample = sample
-        self.save_model = save_model
-        self.allVals = None
-
+        self.tobacco_i=0
+        self.opt = opt
         self.best_fitting = [0, 0, 0, 0]
+        self.allVals = None
 
     def _report_settings(self):
         print("=======================================")
@@ -98,41 +99,6 @@ class Training:
         )
         print("=======================================")
 
-#    def _report_model(self, model, input, loader):
-#        print("=======================================")
-#        for width in self.widths:
-#            model.set_width(width)
-#            flops = FlopCountAnalysis(model, input)
-#            # Flops
-#            # Facebook Research
-#            # Parameters
-#            # Facebook Research
-#
-#            # https://discuss.pytorch.org/t/how-do-i-check-the-number-of-parameters-of-a-model/4325/8
-#            print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-#            # https://pypi.org/project/ptflops/
-#            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-#            print(flops.total(), sum([x for x in parameter_count(model).values()]))
-#            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-#            print("-----------------------------")
-#            print(
-#                get_model_complexity_info(
-#                    model, (3, 128, 128), print_per_layer_stat=False
-#                )
-#            )
-#            print("-----------------------------")
-#            print("*****************************")
-#            print(thop.profile(model, (input,)))
-#            print("*****************************")
-#            print("?????????????????????????????")
-#            print(pthflops.count_ops(model, input))
-#            print("?????????????????????????????")
-#            # print(flops.by_operator())
-#            # print(flops.by_module())
-#            # print(flops.by_module_and_operator())
-#            # print(flop_count_table(flops))
-#        print("=======================================")
-
     def _find_best_fitting(self, metrics):
         """
         Could you perhaps try training it by monitoring the validation scores for each
@@ -146,10 +112,6 @@ class Training:
         """
         allVals = metrics
         metrics = [
-            #metrics["iou/valid/25/weeds"],
-            #metrics["iou/valid/50/weeds"],
-            #metrics["iou/valid/75/weeds"],
-            #metrics["iou/valid/100/weeds"],
             metrics["valid/100/iou/weeds"],
         ]
 
@@ -162,10 +124,10 @@ class Training:
                 return False
 
         # Then check if the differences between neighbours are higher than current best
-        if sum(
-            [self.best_fitting[i] - self.best_fitting[i - 1] for i in range(1, 1)]
-        ) > sum([metrics[i] - metrics[i - 1] for i in range(1, 1)]):
-            return False
+        #if sum(
+        #    [self.best_fitting[i] - self.best_fitting[i - 1] for i in range(1, 1)]
+        #) > sum([metrics[i] - metrics[i - 1] for i in range(1, 1)]):
+        #    return False
 
         print()
         print("New best scores:")
@@ -199,6 +161,66 @@ class Training:
                 T_max=self.epochs
             )
 
+    def test(self, model):
+        ii = ImageImporter(
+            self.dataset,
+            validation=False,
+            sample=False,
+            smaller=self.image_resolution,
+            tobacco_i=self.tobacco_i
+        )
+        _, test = ii.get_dataset()
+        test_loader = DataLoader(test, batch_size=1, shuffle=False)
+
+
+
+    def prepare_model(self):
+        model = None
+        out_channels = len(settings.LOSS_WEIGHTS)
+        if not self.continue_model:
+            if self.architecture == "slim":
+                model = SlimUNet(out_channels)
+            elif self.architecture == "squeeze":
+                model = SlimSqueezeUNet(out_channels)
+                if self.dataset == "cofly":
+                    model = SlimSqueezeUNetCofly(out_channels)
+                # model = SlimPrunedSqueezeUNet(in_channels, dropout=self.dropout)
+            else:
+                if self.architecture == "unet_perf":
+                    model = UNet(out_channels)
+                    perforate_net_perfconv(model, perforation_mode=(2, 2))
+                elif self.architecture == "unet":
+                    model = UNet(out_channels)
+                elif self.architecture == "unet2":
+                    model = UNetPerf(out_channels, perforation_mode=(2, 2))
+                    # perforate_net_perfconv(model, perforation_mode=(1,1))
+                elif self.architecture == "unet_dau":
+                    model = UNet(out_channels)  # UNetDAU(out_channels)
+                    perforate_net_downActivUp(model, perforation_mode=(2, 2),
+                                              in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom":
+                    model = UNetCustom(out_channels)
+                    # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                    # perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom_dau":
+                    model = UNetCustom(out_channels)
+                    perforate_net_downActivUp(model, perforation_mode=(2, 2),
+                                              in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                    # perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                elif self.architecture == "unet_custom_perf":
+                    model = UNetCustom(out_channels)
+                    # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
+                    perforate_net_perfconv(model, perforation_mode=(2, 2),
+                                           in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                else:
+                    raise ValueError("Unknown model architecture.")
+        else:
+            model = torch.load(
+                Path(settings.PROJECT_DIR)
+                / "segmentation/training/garage/"
+                / self.continue_model
+            )
+        return model
     def train(self):
         if self.verbose:
             print("Training process starting...")
@@ -222,9 +244,10 @@ class Training:
             validation=True,
             sample=self.sample,
             smaller=self.image_resolution,
+            tobacco_i=self.tobacco_i
         )
 
-        train, validation = ii.get_dataset(tf)
+        train, validation = ii.get_dataset()
         if self.verbose:
             print("Number of training instances: {}".format(len(train)))
             print("Number of validation instances: {}".format(len(validation)))
@@ -239,61 +262,32 @@ class Training:
         loss_function = torch.nn.CrossEntropyLoss(
             weight=tensor(settings.LOSS_WEIGHTS).to(self.device)
         )
-
+        model = self.prepare_model()
         # Prepare the model
-        out_channels = len(settings.LOSS_WEIGHTS)
-        if not self.continue_model:
-            if self.architecture == "slim":
-                model = SlimUNet(out_channels)
-            elif self.architecture == "squeeze":
-                model = SlimSqueezeUNet(out_channels)
-                if self.dataset == "cofly":
-                    model = SlimSqueezeUNetCofly(out_channels)
-                # model = SlimPrunedSqueezeUNet(in_channels, dropout=self.dropout)
-            else:
-                if self.architecture == "unet_perf":
-                    model = UNet(out_channels)
-                    perforate_net_perfconv(model, perforation_mode=(2,2))
-                elif self.architecture == "unet":
-                    model = UNet(out_channels)
-                elif self.architecture == "unet2":
-                    model = UNetPerf(out_channels, perforation_mode=(2,2))
-                    #perforate_net_perfconv(model, perforation_mode=(1,1))
-                elif self.architecture == "unet_dau":
-                    model = UNet(out_channels)#UNetDAU(out_channels)
-                    perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                elif self.architecture == "unet_custom":
-                    model = UNetCustom(out_channels)
-                    #perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                    #perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                elif self.architecture == "unet_custom_dau":
-                    model = UNetCustom(out_channels)
-                    perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                    #perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                elif self.architecture == "unet_custom_perf":
-                    model = UNetCustom(out_channels)
-                    # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                    perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                else:
-                    raise ValueError("Unknown model architecture.")
-        else:
-            model = torch.load(
-                Path(settings.PROJECT_DIR)
-                / "segmentation/training/garage/"
-                / self.continue_model
-            )
         summary(model, input_size=(self.batch_size, 3, self.image_resolution[0], self.image_resolution[1]))
         # summary(model, input_size=(in_channels, 128, 128))
         model.to(self.device)
 
         # Prepare the optimiser
-        optimizer = Adam(
-            model.parameters(),
-            lr=self.learning_rate,
-            weight_decay=self.regularisation_l2,
-        )
+        optimizer = None
+        if self.opt != "Adam":
+            optimizer = SGD(model.parameters(), lr=self.learning_rate, weight_decay=self.regularisation_l2)
+        else:
+            optimizer = Adam(
+                model.parameters(),
+                lr=self.learning_rate,
+                weight_decay=self.regularisation_l2,
+            )
         scheduler = self._learning_rate_scheduler(optimizer)
-
+        #early_stopper = EarlyStopper(patience=5, verbose=False, path=garage_path+'/checkpoint.pt')
+        valid_losses = []
+        losses = []
+        valid_loss_list = []
+        train_loss_list = []
+        test_loss_list = []
+        test_loss = 0
+        valid_loss = 0
+        train_loss = 0
         for epoch in range(self.epochs):
             s = datetime.now()
 
@@ -306,24 +300,38 @@ class Training:
                 outputs = model.forward(X)
                 # Calculate loss function
                 loss = loss_function(outputs, y)
+                losses.append(loss.item())
                 # Backward pass
                 loss.backward()
                 # Update weights
                 optimizer.step()
-
+            scheduler.step()
             model.eval()
+            if False:
+                print("TODO: validation reintegration")
+
+                for X, y in valid_loader:
+                    X, y = X.to(self.device), y.to(self.device)
+                    # forward pass: compute predicted outputs by passing inputs to the model
+                    for width in sorted(self.widths, reverse=True):
+                        # Set the current width
+                        model.set_width(width)
+                        output = model.forward(X)
+                        # calculate the loss
+                        loss = loss_function(output, y)
+                        # record validation loss
+                        valid_losses.append(loss.item())
+
+                valid_loss = np.average(valid_losses)
+                valid_loss_list.append(valid_loss)
+
             with torch.no_grad():
                 metrics = Metricise(device=self.device)
+
+                load = valid_loader
                 ind_worst, img_worst, ind_best, img_best = metrics.evaluate(
-                    model, train_loader, "train", epoch, loss_function=loss_function
+                    model, load, "valid", epoch, loss_function=loss_function
                 )
-                #cv2.destroyAllWindows()
-                #print(
-                #    torch.nn.functional.upsample(train_loader.dataset[ind_worst][0].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, [1,2,0]].shape,
-                #    torch.tile(torch.nn.functional.upsample(train_loader.dataset[ind_worst][1].unsqueeze(0), scale_factor=(5,5)).squeeze().movedim(0,-1)[:, :, 0].unsqueeze(-1), (1, 1, 3)).shape,
-                #    img_worst[0].shape,
-                #    img_worst.cpu().detach().numpy().shape)
-                load = train_loader
                 sz = load.dataset[ind_best][0].shape[-1]
                 scale = 512/sz
                 scale = (scale, scale)
@@ -365,6 +373,28 @@ class Training:
                     plt.cla()
                     with open(f"./{dirname}/{self.architecture}{self.image_resolution[0]}.txt", "w") as ff:
                         print(self.best_fitting, self.allVals, file=ff)
+
+                    ii = ImageImporter(
+                        self.dataset,
+                        validation=False,
+                        sample=False,
+                        smaller=self.image_resolution,
+                        tobacco_i=self.tobacco_i
+                    )
+                    _, test = ii.get_dataset()
+                    test_loader = DataLoader(test, batch_size=1, shuffle=False)
+                    # for X, y in test_loader:
+                    #    X, y = X.to(self.device), y.to(self.device)
+                    #    # forward pass: compute predicted outputs by passing inputs to the model
+                    #    output = model.forward(X)
+                    #    # calculate the loss
+                    #    loss = loss_function(output, y)
+                    #    # record validation loss
+                    #    test_losses.append(loss.item())
+                    ind_worst, img_worst, ind_best, img_best = metrics.evaluate(
+                        model, test_loader, "test", epoch, loss_function=loss_function
+                    )
+
             if self.learning_rate_scheduler == "no scheduler":
                 metrics.add_static_value(self.learning_rate, "learning_rate")
             else:
@@ -383,7 +413,7 @@ class Training:
                     print(self.allVals, file=gg)
                     print("\n--------------------------------\n")
             #if epoch > 50:
-            if self._find_best_fitting(res) and self.save_model:
+            if self._find_best_fitting(res) and False and self.save_model:
                 torch.save(
                     model.state_dict(),
                     garage_path + "model_{}.pt".format(str(epoch).zfill(4)),
@@ -394,7 +424,7 @@ class Training:
                         epoch + 1, datetime.now() - s
                     )
                 )
-        torch.save(model.state_dict(), garage_path + "model_final.pt".format(epoch))
+        #torch.save(model.state_dict(), garage_path + "model_final.pt".format(epoch))
 
 
 if __name__ == "__main__":
@@ -442,13 +472,16 @@ if __name__ == "__main__":
             print(image_resolution, batch_size)
             tr = Training(
                 device,
-                dataset="geok",
+                dataset="bigagriadapt",
                 image_resolution=image_resolution,
                 architecture=architecture,
                 batch_size=batch_size,
                 continue_model="",
-                learning_rate=lr,
+                learning_rate=0.1,
+                regularisation_l2=0.0005,
+                opt = "SGD"
             )
             tr.train()
             t1 = time.time()
             print("perforated training completed in", t1 - t0, "seconds")
+            tr.test()

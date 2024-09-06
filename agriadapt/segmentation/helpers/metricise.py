@@ -61,10 +61,21 @@ class Metricise:
                 for i in range(len(y_pred)):
                     losses.append(loss_function(y_pred[i][None, :, :, :], y[i][None, :, :, :]).detach().cpu())
                     imgs.append(y_pred[i])
+                    #print(losses[-1], y_pred[:][0].shape, y[:][0].shape)
+                    #print(loss_function(y_pred[0], y))
                     #TODO: find good and bad performing images for every network for each network, make a folder that contains 3 best and 3 worst images
                 self.calculate_metrics(y, y_pred, key)
+
                 if loss_function:
-                    self.add_static_value(loss_function(y, y_pred).cpu(), key + "/loss")
+                    self.add_static_value(
+                        loss_function(y[0][None, :, :], y_pred[0][None, :, :]).cpu(), key + "/loss/back"
+                    )
+                    self.add_static_value(
+                        loss_function(y[1][None, :, :], y_pred[1][None, :, :]).cpu(), key + "/loss/weeds"
+                    )
+
+                #if loss_function:
+                #    self.add_static_value(loss_function(y, y_pred).cpu(), key + "/loss")
 
                 if width == self.widths[-1] and image_pred:
                     self._add_image(X, y, y_pred, epoch)

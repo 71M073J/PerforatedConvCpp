@@ -10,6 +10,7 @@ import torch
 #perforation_mode = (3,1)
 #device = "cpu"
 #a = PerforatedConv2d(256,64,3, device=device, perforation_mode=(2,2))
+from Architectures.PerforatedConv2d import DownActivUp as DAU
 for device in ["cuda:0", "cpu"]:
     print("Pytorch testing")
     a = torch.nn.Conv2d(64, 64, 3, device=device)
@@ -47,10 +48,10 @@ for device in ["cuda:0", "cpu"]:
 
 
 
-            a = PerforatedConv2d(64,64,3, device=device, perforation_mode=perforation_mode)
-            b = PerforatedConv2d(64, 64,3, device=device, perforation_mode=perforation_mode)
-            c = PerforatedConv2d(64, 64,3, device=device, perforation_mode=perforation_mode)
-            d = PerforatedConv2d(64, 64,3, device=device, perforation_mode=perforation_mode)
+            a = DAU(64,64,3, device=device, perforation_mode=perforation_mode)
+            b = DAU(64, 64,3, device=device, perforation_mode=perforation_mode)
+            c = DAU(64, 64,3, device=device, perforation_mode=perforation_mode)
+            d = DAU(64, 64,3, device=device, perforation_mode=perforation_mode)
 
             h = torch.rand((32, 64, 64, 64), device=device)
             output = a(h)
