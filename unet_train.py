@@ -33,7 +33,7 @@ from segmentation.models.slim_unet import SlimUNet
 from agriadapt.dl_scripts.UNet import UNet
 from Architectures.UNetPerf import UNet as UNetPerf
 from Architectures.UNetDAU import UNet as UNetDAU
-from UnetCustom import UNet as UNetCustom
+from Architectures.UnetCustom import UNet as UNetCustom
 from perforateCustomNet import perforate_net_perfconv, perforate_net_downActivUp
 
 
@@ -56,7 +56,9 @@ class Training:
         continue_model="",  # This is set to model name that we want to continue training with (fresh training if "")
         sample=0,
         tobacco_i=0,
-        opt="Adam"
+        opt="Adam",
+        perforate_at_epoch=0,
+        perforate_fun=perforate_net_perfconv
     ):
         self.architecture = architecture
         self.device = device
@@ -77,6 +79,8 @@ class Training:
         self.opt = opt
         self.best_fitting = [0, 0, 0, 0]
         self.allVals = None
+        self.perforate_at_epoch = perforate_at_epoch
+        self.perforate_fun=perforate_fun
 
     def _report_settings(self):
         print("=======================================")
@@ -129,15 +133,7 @@ class Training:
         #) > sum([metrics[i] - metrics[i - 1] for i in range(1, 1)]):
         #    return False
 
-        print()
-        print("New best scores:")
-        print("All scores:", allVals)
-        print(f"Comparing metrics: {metrics}")
-        print(f"Current best:      {self.best_fitting}")
-        print()
 
-        self.best_fitting = metrics
-        self.allVals = allVals
         return True
 
     def _learning_rate_scheduler(self, optimizer):
@@ -196,7 +192,8 @@ class Training:
                     # perforate_net_perfconv(model, perforation_mode=(1,1))
                 elif self.architecture == "unet_dau":
                     model = UNet(out_channels)  # UNetDAU(out_channels)
-                    perforate_net_downActivUp(model, perforation_mode=(2, 2),
+                    if self.perforate_at_epoch == 0:
+                        perforate_net_downActivUp(model, perforation_mode=(2, 2),
                                               in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom":
                     model = UNetCustom(out_channels)
@@ -204,13 +201,16 @@ class Training:
                     # perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom_dau":
                     model = UNetCustom(out_channels)
-                    perforate_net_downActivUp(model, perforation_mode=(2, 2),
+                    if self.perforate_at_epoch == 0:
+                        perforate_net_downActivUp(model, perforation_mode=(2, 2),
                                               in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
                     # perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom_perf":
                     model = UNetCustom(out_channels)
                     # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
-                    perforate_net_perfconv(model, perforation_mode=(2, 2),
+
+                    if self.perforate_at_epoch == 0:
+                        perforate_net_perfconv(model, perforation_mode=(2, 2),
                                            in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
                 else:
                     raise ValueError("Unknown model architecture.")
@@ -282,6 +282,7 @@ class Training:
         #early_stopper = EarlyStopper(patience=5, verbose=False, path=garage_path+'/checkpoint.pt')
         valid_losses = []
         losses = []
+        curr_min_loss = 999
         valid_loss_list = []
         train_loss_list = []
         test_loss_list = []
@@ -290,7 +291,8 @@ class Training:
         train_loss = 0
         for epoch in range(self.epochs):
             s = datetime.now()
-
+            if epoch == self.perforate_at_epoch:
+                self.perforate_fun(model, in_size=self.image_resolution, pretrained=True)
             model.train()
             for X, y in train_loader:
                 # Move to GPU
@@ -305,7 +307,7 @@ class Training:
                 loss.backward()
                 # Update weights
                 optimizer.step()
-            scheduler.step()
+            #scheduler.step()
             model.eval()
             if False:
                 print("TODO: validation reintegration")
@@ -329,7 +331,7 @@ class Training:
                 metrics = Metricise(device=self.device)
 
                 load = valid_loader
-                ind_worst, img_worst, ind_best, img_best = metrics.evaluate(
+                ind_worst, img_worst, ind_best, img_best, losss = metrics.evaluate(
                     model, load, "valid", epoch, loss_function=loss_function
                 )
                 sz = load.dataset[ind_best][0].shape[-1]
@@ -391,7 +393,7 @@ class Training:
                     #    loss = loss_function(output, y)
                     #    # record validation loss
                     #    test_losses.append(loss.item())
-                    ind_worst, img_worst, ind_best, img_best = metrics.evaluate(
+                    ind_worst, img_worst, ind_best, img_best, losss = metrics.evaluate(
                         model, test_loader, "test", epoch, loss_function=loss_function
                     )
 
@@ -402,6 +404,14 @@ class Training:
                 scheduler.step()
 
             res = metrics.report()
+            print()
+            print("New best scores:")
+            print("All scores:", res)
+            print(f"Current:   {res['valid/100/iou/weeds']}")
+            print(f"Best:      {self.best_fitting}")
+            print()
+
+            self.allVals = metrics
             #print(res)
             #print(res["valid/100/iou/weeds"])
             # Only save the model if it is best fitting so far
@@ -413,10 +423,15 @@ class Training:
                     print(self.allVals, file=gg)
                     print("\n--------------------------------\n")
             #if epoch > 50:
-            if self._find_best_fitting(res) and False and self.save_model:
+            #TODO: savej za najboljši dosedaj model in tut printaj
+            if losss < curr_min_loss:
+                curr_min_loss = losss
+
+                self.best_fitting = res['valid/100/iou/weeds']
+            #if self._find_best_fitting(res) and epoch == settings.EPOCHS - 1:
                 torch.save(
                     model.state_dict(),
-                    garage_path + "model_{}.pt".format(str(epoch).zfill(4)),
+                    f"{self.architecture}{self.image_resolution[0]}",
                 )
             if self.verbose and epoch % 10 == 0:
                 print(
@@ -442,7 +457,7 @@ if __name__ == "__main__":
     # for architecture in ["slim", "squeeze"]:
     #architecture = "unet_perf"
     architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_dau", "unet_perf", "unet2", "unet",]
-    #architectures = ["unet_custom_dau"]
+    architectures = ["unet_custom_dau"]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)
@@ -453,13 +468,9 @@ if __name__ == "__main__":
              (256, 256),
              (512, 512)
              ],
-            [2**5, 2**3, 2**1] if extrapath.startswith("/mnt/") else [2**6, 2**5, 2**3]
+            [2**5, 2**3, 2**1] if extrapath.startswith("/mnt/") else [2**5, 2**5, 2**3]
         )):
-            lr = 0
-            if i == 0 and "dau" not in architecture:
-                lr = 0.001
-            else:
-                lr = 0.0002
+
             # tr = Training(
             #     device,
             #     dataset="geok",
@@ -477,11 +488,12 @@ if __name__ == "__main__":
                 architecture=architecture,
                 batch_size=batch_size,
                 continue_model="",
-                learning_rate=0.1,
-                regularisation_l2=0.0005,
-                opt = "SGD"
+                learning_rate=settings.LEARNING_RATE,
+                regularisation_l2=settings.REGULARISATION_L2,
+                opt = "SGD",
+                perforate_at_epoch=0 if ("dau" in architecture or "perf" in architecture) else -1,
+                perforate_fun=perforate_net_perfconv if architecture.endswith("perf") else perforate_net_downActivUp
             )
             tr.train()
             t1 = time.time()
             print("perforated training completed in", t1 - t0, "seconds")
-            tr.test()

@@ -131,14 +131,14 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                 print("Recursing deeper...")
             replace_module_downActivUp(submodule, perforation_mode, pretrained, from_class=from_class, layers=layers, start_n=start_n, replace_activs=replace_activs)
         else:
-            start_n[0] +=1
+            start_n[0] += 1
 
 def _get_perforation(self, part=None):
     if part is None:
         part = self
     convs = []
     for submodule in part.children():
-        if type(submodule) == PerforatedConv2d:
+        if type(submodule) in [PerforatedConv2d, DownActivUp]:
             convs.append(submodule.perf_stride)
         elif len(list(submodule.children())) != 0:
             convs.append(self._get_perforation(submodule))
@@ -151,7 +151,7 @@ def _set_perforation(self, perfs, part=None,start_n=0):
     if type(perfs) == tuple:
         perfs = [perfs] * len(flatten_list(self._get_n_calc()))
     for submodule in part.children():
-        if type(submodule) == PerforatedConv2d:
+        if type(submodule) in [PerforatedConv2d, DownActivUp]:
             submodule.perf_stride = perfs[start_n[0]]
             submodule.recompute = True
             start_n[0] += 1
@@ -163,7 +163,7 @@ def _set_perforation(self, perfs, part=None,start_n=0):
 def _reset(self):
     def recomp(net):
         for c in net.children():
-            if type(c) == PerforatedConv2d:
+            if type(c) in [PerforatedConv2d, DownActivUp]:
                 c.recompute = True
             else:
                 recomp(c)
@@ -186,7 +186,7 @@ def _get_n_calc(self, part=None):
         part = self
     convs = []
     for submodule in part.children():
-        if type(submodule) == PerforatedConv2d:
+        if type(submodule) in [PerforatedConv2d, DownActivUp]:
             convs.append(submodule.calculations)
         elif len(list(submodule.children())) != 0:
             convs.append(self._get_n_calc(submodule))
@@ -200,7 +200,10 @@ def add_functs(net):
     net._get_total_n_calc = MethodType(_get_total_n_calc, net)
 
 def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,2), pretrained=False, in_size=(1,3,512,512)):
+    if len(in_size) == 2:
+        in_size = (1,3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)
+    setattr(net, "is_perf", True)
     replace_module_perfconv(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained)
     add_functs(net)
     print(net.in_size)
@@ -209,6 +212,7 @@ def perforate_net_downActivUp(net, in_size,from_class=torch.nn.Conv2d, perforati
     if len(in_size) == 2:
         in_size = (1,3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)
+    setattr(net, "is_perf", True)
     replace_module_downActivUp(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained, verbose=verbose)
     add_functs(net)
     print(net.in_size)

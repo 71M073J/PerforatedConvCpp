@@ -11,6 +11,7 @@ except:
     pass
 
 PROJECT_DIR = "/mnt/c/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda/agriadapt"
+#PROJECT_DIR = "C:/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda/agriadapt"
 # SEED = 4231
 SEED = 123
 
@@ -23,9 +24,10 @@ BATCH_SIZE = 2**1
 # BATCH_SIZE = 2**7
 # BATCH_SIZE = 2**8
 # EPOCHS = 1000
-EPOCHS = 300
+EPOCHS = 100
 
 LEARNING_RATE = 0.001
+LEARNING_RATE = 0.5
 #LEARNING_RATE = 0.0002
 # LEARNING_RATE_SCHEDULER = "linear"
 LEARNING_RATE_SCHEDULER = "cosine"
@@ -35,7 +37,7 @@ LEARNING_RATE_SCHEDULER = "cosine"
 # MODEL = "slim"
 MODEL = "squeeze"
 
-REGULARISATION_L2 = 0.1
+REGULARISATION_L2 = 0.0005
 
 DROPOUT = 0 #UNet does not support dropout
 # DROPOUT = 0.75
@@ -61,6 +63,7 @@ KNN_WIDTHS = {
 # LOSS_WEIGHTS = [0.1, 0.45, 0.45]
 # Cofly loss weights
 LOSS_WEIGHTS = [0.1, 0.9]
+#LOSS_WEIGHTS = [0.25, 0.75]
 
 METRICS = {
     "iou": BinaryJaccardIndex,

@@ -48,6 +48,7 @@ class CINIC10_(Dataset):
         self.path = os.path.join(dir, mode)
         self.classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
         self.imgpaths = []
+        self.name = "CINIC10"
         for cl in self.classes:
             classpaths = os.listdir(os.path.join(self.path, cl))
             for img in classpaths:
@@ -375,6 +376,7 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
         n_conv = len(net.perforation)
     p = net._get_perforation()
     minacc = 1000
+    minacc = 1000
     for epoch in range(n_epochs):
         train(do_profiling, dataset, n_conv, p, device, loss_fn, make_imgs, losses, op, verbose, file, items, epoch,
               ep_losses, vary_perf, eval_mode, net, bs, run_name, reporting, vary_num, grad_clip)
@@ -623,16 +625,6 @@ if __name__ == "__main__":
                 root='./data', train=False, download=True, transform=tf_test), batch_size=bs, shuffle=False,
             num_workers=4)
 
-        # TODO check the article for interpolation strategies
-        #  todo different ways of interpolation/perforation (from the article) measuere the
-        #   effect on just one layer(implement in architecture probably)
-        #   work on gradient comparison on one layer thing but use the entire network so we can do the comparison
-        #   while learning (just maybe do matrix difference images or something like that,
-        #   such as gradient number size comparison in a distibution
-        #   dont bother much (or at all) with speedup, focus on "accuracy" performance
-
-        #
-        # TODO entropy of the output probability vector - ugotovi zakaj ne dela prav
 
     i = 0
     if not os.path.exists("./results"):

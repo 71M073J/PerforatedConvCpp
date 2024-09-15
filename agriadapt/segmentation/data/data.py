@@ -4,6 +4,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+extrapath = '/mnt/c/Users/timotej/pytorch/PyTorch-extension-Convolution/conv_cuda'
+import sys
+sys.path.append(extrapath)
 import numpy as np
 import torch
 import cv2
@@ -11,27 +14,29 @@ from numpy import floor, ceil
 from sklearn.model_selection import train_test_split
 from torch import Generator, tensor, argmax, ones, zeros, cat, unique, flatten
 from torch.utils.data import Dataset, random_split
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
+
 from shapely import Polygon, Point
 
 from PIL import Image
-import matplotlib.pyplot as plt
-from torchvision.utils import draw_segmentation_masks
-
-import segmentation.settings as settings
+import agriadapt.segmentation.settings as settings
 
 
 class ImageDataset(Dataset):
-    def __init__(self, X, y):
+    def __init__(self, X, y, transform):
         self.X = X
         self.y = y
-
+        self.transform=transform
+        self.tf = transforms.ToImage()
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, item):
-        return self.X[item], self.y[item]
-
+        #print(self.X[item].shape)
+        #print(self.y[item].shape)
+        #print(self.tf(self.y[item]).shape)
+        #
+        return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
 
 class ImageImporter:
     def __init__(
@@ -43,7 +48,7 @@ class ImageImporter:
         only_training=False,
         only_test=False,
         tobacco_i=0,
-        augmentations=None,
+        transform=None,
     ):
         assert dataset in [
             "bigagriadapt",
@@ -68,10 +73,11 @@ class ImageImporter:
         self.tobacco_i = tobacco_i
 
         self.project_path = Path(settings.PROJECT_DIR)
+        self.transform = transform
 
     def get_dataset(self):
         if self._dataset == "bigagriadapt":
-            return self._get_geok(data_dir="segmentation/data/big_agriadapt/")
+            return self._get_geok(data_dir="segmentation/data/big_agriadapt/", transform=self.transform)
         if self._dataset == "agriadapt":
             # This is deprecated as it was later incorporated elsewhere.
             # return self._get_agriadapt()
@@ -262,86 +268,25 @@ class ImageImporter:
                     split="train"
                 ), self._fetch_infest_split(split="test")
 
-    def _fetch_infest_split(
-        self,
-        data_dir="segmentation/data/agriadapt/NN_labeled_samples_salad_infesting_plants.v1i.yolov7pytorch/",
-        split="train",
-    ):
-        images = sorted(os.listdir(self.project_path / data_dir / split / "images/"))
-        create_tensor = transforms.ToTensor()
-        X, y = [], []
 
-        if self.sample and split == "train":
-            images = random.sample(images, self.sample)
-
-        for file_name in images:
-            img = Image.open(
-                self.project_path / data_dir / split / "images/" / file_name
-            )
-            if self.smaller:
-                smaller = transforms.Resize(self.smaller)
-                img = smaller(img)
-            tens = create_tensor(img)
-            X.append(tens)
-            if not os.path.isdir(self.project_path / data_dir / split / "labels"):
-                os.mkdir(self.project_path / data_dir / split / "labels")
-            if not os.path.isfile(self.project_path / data_dir / split / "labels/" / file_name):
-
-                image_width = tens.shape[1]
-                image_height = tens.shape[2]
-
-                # Constructing the segmentation mask
-                # We init the whole tensor as background
-                # TODO: if we do transfer learning from cofly, we need the background and weeds masks (no lettuce)
-                # That means that we have 1 as the first argument of zeros (as we only have weeds -- no lettuce)
-                mask = cat(
-                    (
-                        ones(1, image_width, image_height),
-                        zeros(2, image_width, image_height),
-                    ),
-                    0,
-                )
-                # Then, label by label, add to other classes and remove from background.
-                file_name = file_name[:-3] + "txt"
-                with open(
-                    self.project_path / data_dir / split / "labels/" / file_name
-                ) as rows:
-                    labels = [row.rstrip() for row in rows]
-                    for label in labels:
-                        class_id, pixels = self._yolov7_label(
-                            label, image_width, image_height
-                        )
-                        if class_id > 1:
-                            continue
-                        # TODO: another thing to keep in mind with transfer learning from cofly
-                        # Change values based on received pixels
-                        print(class_id)
-                        for pixel in pixels:
-                            mask[0][pixel[0]][pixel[1]] = 0
-                            mask[class_id][pixel[0]][pixel[1]] = 1
-                y.append(mask)
-
-
-        return ImageDataset(X, y)
-
-    def _get_geok(self, data_dir="segmentation/data/geok/"):
+    def _get_geok(self, data_dir="segmentation/data/geok/", transform=None):
         """
         Retrieve the geok dataset with background and weeds labels.
         """
         test_set_name = "valid" if self.validation else "test"
         if self.only_training:
-            return self._fetch_geok_split(split="train", data_dir=data_dir), None
+            return self._fetch_geok_split(split="train", data_dir=data_dir, transform=self.transform), None
         elif self.only_test:
-            return None, self._fetch_geok_split(split=test_set_name, data_dir=data_dir)
+            return None, self._fetch_geok_split(split=test_set_name, data_dir=data_dir, transform=self.transform)
         else:
             return self._fetch_geok_split(
-                split="train", data_dir=data_dir
-            ), self._fetch_geok_split(split=test_set_name, data_dir=data_dir)
+                split="train", data_dir=data_dir, transform=self.transform
+            ), self._fetch_geok_split(split=test_set_name, data_dir=data_dir, transform=self.transform)
 
     def _fetch_geok_split(
         self,
         data_dir,
-        split,
+        split, transform
     ):
         images = sorted(os.listdir(self.project_path / data_dir / split / "images/"))
         create_tensor = transforms.ToTensor()
@@ -392,7 +337,7 @@ class ImageImporter:
                         for pixel in pixels:
                             mask[0][pixel[0]][pixel[1]] = 0
                             mask[class_id][pixel[0]][pixel[1]] = 1
-
+                #print("Saving mask...")
                 y.append(mask)
                 if self.smaller:
                     smaller = transforms.Resize(self.smaller)
@@ -401,9 +346,10 @@ class ImageImporter:
                     torch.save(mask, self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
 
             else:
+                #print("it exists ffs")
                 y.append(torch.load(self.project_path / data_dir / split / f"labels/{i}_{sizes}.label"))
 
-        return ImageDataset(X, y)
+        return ImageDataset(X, y, transform)
 
     def _yolov7_label(self, label, image_width, image_height):
         """
@@ -572,27 +518,21 @@ class ImageImporter:
 
 
 if __name__ == "__main__":
-    ii = ImageImporter("geok", sample=1, smaller=(512, 512), only_training=True)
-    train, test = ii.get_dataset()
-
-    for X, y in iter(train):
-        x_mask = torch.tensor(torch.mul(X, 255), dtype=torch.uint8)
-        weeds_mask = torch.tensor(y[1], dtype=torch.bool)
-        image = draw_segmentation_masks(
-            x_mask,
-            weeds_mask,
-            colors=["red"],
-            alpha=0.5,
-        )
-        # plt.imshow(X.permute(1, 2, 0))
-        # plt.show()
-        plt.imshow(image.permute(1, 2, 0))
-        plt.show()
-        0 / 0
-
-    # ii = ImageImporter("cofly")
-    # train, test = ii.get_dataset()
-    # X, y = next(iter(train))
-    # y = argmax(y, dim=0)
-    # plt.imshow(y)
-    # plt.show()
+    tf = []
+    tf.append(transforms.RandomRotation(45))
+    tf.append(transforms.Normalize([0.4858, 0.3100, 0.3815],
+                                   [0.1342, 0.1193, 0.1214]))
+    image_resolution=(128,128)
+    tf = transforms.Compose(tf)
+    train, valid = ImageImporter(
+        "bigagriadapt",
+        validation=True,
+        sample=0,
+        smaller=image_resolution, transform=tf
+    ).get_dataset()
+    batch_size=32
+    num_workers=4
+    train, valid= torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, num_workers=num_workers),\
+                             torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    for i in train:
+        print(i)

@@ -66,14 +66,18 @@ class Metricise:
                     #TODO: find good and bad performing images for every network for each network, make a folder that contains 3 best and 3 worst images
                 self.calculate_metrics(y, y_pred, key)
 
-                if loss_function:
-                    self.add_static_value(
-                        loss_function(y[0][None, :, :], y_pred[0][None, :, :]).cpu(), key + "/loss/back"
-                    )
-                    self.add_static_value(
-                        loss_function(y[1][None, :, :], y_pred[1][None, :, :]).cpu(), key + "/loss/weeds"
-                    )
-
+                if len(y.shape) == 4 and y.shape[1] == 2:
+                    if loss_function:
+                        self.add_static_value(
+                            loss_function(y[0][None, :, :], y_pred[0][None, :, :]).cpu(), key + "/loss/back"
+                        )
+                        self.add_static_value(
+                            loss_function(y[1][None, :, :], y_pred[1][None, :, :]).cpu(), key + "/loss/weeds"
+                        )
+                else:
+                    print(y.shape)
+                    print(y)
+                    print("Why? something got fucked up")
                 #if loss_function:
                 #    self.add_static_value(loss_function(y, y_pred).cpu(), key + "/loss")
 
@@ -85,7 +89,7 @@ class Metricise:
             self._calculate_adpative(adaptive_knns, name, loader, model)
         ind_worst = np.argmax(losses)
         ind_best = np.argmin(losses)
-        return ind_worst, imgs[ind_worst].cpu().detach().round(), ind_best, imgs[ind_best].cpu().detach().round()
+        return ind_worst, imgs[ind_worst].cpu().detach().round(), ind_best, imgs[ind_best].cpu().detach().round(), np.mean(losses)
 
     def calculate_metrics(self, y_true, y_pred, name):
         y_pred = get_binary_masks_infest(y_pred, dim=2)
