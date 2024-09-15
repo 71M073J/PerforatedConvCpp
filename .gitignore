@@ -307,3 +307,23 @@ data
 *img*
 imag*
 speedtests
+.idea
+Pytorch-UNet
+adam_test
+agriadapt/dl_scripts
+agriadapt/requirements.txt
+agriadapt/sample.png
+agriadapt/segmentation/__init__.py
+agriadapt/.gitignore
+agriadapt/README.md
+agriadapt/__init__.py
+agriadapt/agriadapt.png
+backup long test.py
+conv_gpu.py
+convbacktest.py
+jit.py
+model_final.pt
+outputs_unet.txt
+res
+test.png
+timing
