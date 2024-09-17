@@ -376,7 +376,7 @@ std::vector<torch::Tensor> upscale(torch::Tensor output,
                           torch::indexing::Slice(),
                                 torch::indexing::Slice(x, x+outW),
                                 torch::indexing::Slice(y, y+outH)})
-                .view(torch::IntArrayRef({batch_size, output.size(1), outW, outH}))
+                .view(torch::IntArrayRef({batch_size, output.size(1), outW, outH})).clone()
 
                             };
 

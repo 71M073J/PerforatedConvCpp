@@ -68,7 +68,7 @@ class Up(torch.autograd.Function):
         #    quit()
         ctx.params = (
         dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, kW, kH)
-        return outputs
+        return outputs#.clone()
 
     @staticmethod
     def backward(ctx, gradOutput):
@@ -191,6 +191,8 @@ class PerforatedConv2d(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(out_channels, in_channels // self.groups, self.kernel_size[0], self.kernel_size[1],
                         device=self.device))
+        if bias is None:
+            bias = False
         if type(bias) == bool:
             self.is_bias = bias
             if bias:

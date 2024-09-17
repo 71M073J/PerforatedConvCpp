@@ -2,7 +2,7 @@ import os.path
 import time
 import copy
 from typing import Union
-
+import time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -14,18 +14,22 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import BinaryJaccardIndex, BinaryPrecision, BinaryRecall, BinaryF1Score
-#from torchvision import transforms
+# from torchvision import transforms
+from torchvision.models import resnet18, mobilenet_v2, mobilenet_v3_small
 import torchvision.transforms.v2 as transforms
 from torch.distributions import Categorical
 from contextlib import ExitStack
 from torchinfo import summary
 from pytorch_cinic.dataset import CINIC10
 from ucihar import UciHAR
-from Architectures.PerforatedConv2d import PerforatedConv2d
-from Architectures.mobilenetv2 import MobileNetV2
-from Architectures.mobilenetv3 import mobilenet_v3_large, mobilenet_v3_small, MobileNetV3
-from Architectures.resnet import resnet152, resnet18, ResNet
-from Architectures.UnetCustom import UNet
+# from Architectures.PerforatedConv2d import PerforatedConv2d
+# from Architectures.mobilenetv2 import MobileNetV2
+from perforateCustomNet import perforate_net_perfconv as perfPerf
+from perforateCustomNet import perforate_net_downActivUp as perfDAU
+# from Architectures.mobilenetv3 import mobilenet_v3_large, mobilenet_v3_small, MobileNetV3
+# from Architectures.resnet import resnet152, resnet18, ResNet
+from Architectures.UnetCustom import UNet as UNetCustom
+from agriadapt.dl_scripts.UNet import UNet
 from torch import argmax, where, cat, stack
 import agriadapt.segmentation.settings as settings
 import agriadapt.segmentation.data.data as dd
@@ -39,16 +43,21 @@ metrics = {
 seed = 123
 g = torch.Generator(seed)
 num_workers = 1
+
+
 class NormalizeImageOnly(torch.nn.Module):
     def __init__(self, means, stds):
         super().__init__()
         self.norm = transforms.Normalize(means, stds)
+
     def forward(self, img, classes):
         # Do some transformations
-        #print(img.shape,flush=True)
-        #print(classes.shape,flush=True)
-        #print("----", flush=True)
+        # print(img.shape,flush=True)
+        # print(classes.shape,flush=True)
+        # print("----", flush=True)
         return self.norm(img), classes
+
+
 def get_datasets(data, batch_size, augment=True, image_resolution=None):
     test = None
     tf = [transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)]
@@ -62,8 +71,8 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
                                        [0.24205776, 0.23828046, 0.25874835]))
         tf = transforms.Compose(tf)
         train = DataLoader(CINIC10(partition="train", download=True, transform=tf),  # collate_fn=col,
-                              num_workers=num_workers, batch_size=batch_size, shuffle=True,
-                              generator=g)
+                           num_workers=num_workers, batch_size=batch_size, shuffle=True,
+                           generator=g)
         valid = DataLoader(
             CINIC10(partition="valid", download=True, transform=tf), num_workers=num_workers,  # collate_fn=col,
             batch_size=batch_size, shuffle=True,
@@ -73,12 +82,13 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
             batch_size=batch_size, shuffle=True,
             generator=g, )
     elif data == "cifar":
-        tf.extend([transforms.Normalize((0.49139968, 0.48215827 ,0.44653124), (0.24703233, 0.24348505, 0.26158768))])
-            #(0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010) #old values<- supposedly miscalculated
+        tf.extend([transforms.Normalize((0.49139968, 0.48215827, 0.44653124), (0.24703233, 0.24348505, 0.26158768))])
+        # (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010) #old values<- supposedly miscalculated
         tf = transforms.Compose(tf)
         train = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
-                root='./data', train=True, download=True, transform=tf), batch_size=batch_size, shuffle=True, num_workers=num_workers)
+                root='./data', train=True, download=True, transform=tf), batch_size=batch_size, shuffle=True,
+            num_workers=num_workers)
 
         valid = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
@@ -88,7 +98,7 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
 
         tf.append(transforms.RandomRotation(45))
         tf.append(NormalizeImageOnly([0.4858, 0.3100, 0.3815],
-                                       [0.1342, 0.1193, 0.1214]))
+                                     [0.1342, 0.1193, 0.1214]))
         tf = transforms.Compose(tf)
         train, valid = dd.ImageImporter(
             "bigagriadapt",
@@ -102,25 +112,30 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
             sample=0,
             smaller=image_resolution, transform=tf
         ).get_dataset()
-        train, valid, test = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, num_workers=num_workers),\
-                             torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers),\
-                             torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    elif data=="ucihar" or ("uci" in data.lower() and "har" in data.lower()):
-        #UCIHAR is already normalised - kinda
-        #"but we can still do it"
-        #tf = [transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)]
+        train, valid, test = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True,
+                                                         num_workers=num_workers), \
+            torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers), \
+            torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    elif data == "ucihar" or ("uci" in data.lower() and "har" in data.lower()):
+        # UCIHAR is already normalised - kinda
+        # "but we can still do it"
+        # tf = [transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)]
         tf = []
         tf.append(transforms.Normalize([-4.1705e-04, -9.0756e-05, 3.3419e-01],
                                        [0.1507, 0.3648, 0.5357]))
 
         tf = transforms.Compose(tf)
 
-        train = torch.utils.data.DataLoader(UciHAR("train", transform=tf), batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        valid = torch.utils.data.DataLoader(UciHAR("test", transform=tf), batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        train = torch.utils.data.DataLoader(UciHAR("train", transform=tf), batch_size=batch_size, shuffle=True,
+                                            num_workers=num_workers)
+        valid = torch.utils.data.DataLoader(UciHAR("test", transform=tf), batch_size=batch_size, shuffle=False,
+                                            num_workers=num_workers)
     else:
         raise ValueError("Not supported dataset")
 
+    print("Datasets loaded...")
     return train, valid, test
+
 
 def get_binary_masks_infest(mask, batch_dim=True, dim=3):
     result = []
@@ -156,10 +171,14 @@ def calculate_segmentation_metrics(y_true, y_pred, name, metrics, device, result
 
 
 def get_perfs(perforation_mode, n_conv):
+    if type(perforation_mode) == tuple:
+        perforation_mode = perforation_mode[0]
+    if type(perforation_mode[0]) == int:
+        return perforation_mode, perforation_mode
     if perforation_mode == "incremental":
         raise NotImplementedError()
     elif perforation_mode == "random":  # avg_proc 0.37 of non-perf
-        perfs = np.random.randint(1, perforation_mode + 1, (perforation_mode, 2))
+        perfs = np.random.randint(1, 3 + 1, (n_conv, 2))
     elif perforation_mode == "2by2_equivalent":
         perfs = np.ones((n_conv, 2), dtype=int)
         rns = np.random.random(n_conv)
@@ -188,20 +207,35 @@ def get_perfs(perforation_mode, n_conv):
     return perfs
 
 
-def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, run_name, grad_clip, perforation):
+def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
+          perforation_mode, pretrained, in_size):
     n_conv = 0
     train_accs = []
     losses = []
     # entropies = 0
     # TODO class_accs = np.zeros((2, 15))
     weights = []
-    if hasattr(net, "_set_perforation"):
+    if hasattr(net, "_set_perforation") and type(perforation_mode[0]) == int:
         n_conv = len(net._get_n_calc())
-        net._set_perforation(perforation)
+        net._set_perforation(perforation_mode)
         net._reset()
+    elif perforation_mode[0] is not None:
+        if type(perforation_mode[0]) == int:
+            if "dau" in perforation_type.lower():
+                perfDAU(net, in_size=in_size, perforation_mode=perforation_mode, pretrained=pretrained)
+            elif "perf" in perforation_type.lower():
+                perfPerf(net, in_size=in_size, perforation_mode=perforation_mode, pretrained=pretrained)
+        else:
+            if "dau" in perforation_type.lower():
+                perfDAU(net, in_size=in_size, perforation_mode=(1,1), pretrained=pretrained)
+            elif "perf" in perforation_type.lower():
+                perfPerf(net, in_size=in_size, perforation_mode=(1,1), pretrained=pretrained)
+        n_conv = len(net._get_n_calc())
+        net._set_perforation(get_perfs(perforation_mode, n_conv))
+        #net._reset()
     for i, (batch, classes) in enumerate(data_loader):
-        if vary_perf is not None and n_conv > 0:
-            perfs = get_perfs(vary_perf, n_conv)
+        if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
+            perfs = get_perfs(perforation_mode[0], n_conv)
             net._set_perforation(perfs)
             # net._reset()
 
@@ -216,10 +250,10 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, run_name
         op.step()
         op.zero_grad()
         if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:  # TODO UCIHAR
-            #print("Should be here")
+            # print("Should be here")
             acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
         else:
-            #print("should not be here")
+            # print("should not be here")
             results = {}
             calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
             acc = results[f"{run_name}/iou/weeds"][0]
@@ -232,7 +266,6 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, run_name
         #    probs=torch.maximum(F.softmax(pred.detach().cpu(), dim=1), torch.tensor(1e-12)))  # F.softmax(pred.detach().cpu(), dim=1)
         # entropies += entropy.entropy().mean()
         # acc = (F.softmax(pred.detach().cpu(), dim=1).argmax(dim=1) == classes)
-
 
     return losses, train_accs
 
@@ -256,7 +289,6 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
             valid_losses.append(loss.detach().cpu())
             acc = (F.softmax(pred.detach().cpu(), dim=1).argmax(dim=1) == classes)
             valid_accs.append(torch.sum(acc) / batch_size)
-
         if reporting:
             if file is not None:
                 print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}", file=file)
@@ -265,39 +297,59 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 
     if train_mode is not None:
         net._set_perforation(train_mode)
-        net._reset()
+        #print(train_mode, flush=True)
+        # net._reset()
     return valid_losses, valid_accs
 
 
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
-              perforation_mode=(2, 2),
-              train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, input_size=(1, 3, 32, 32),
-              summarise=True,
+              perforation_mode=(2, 2), perforation_type="dau",
+              train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
+              summarise=True, pretrained=False,
               device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
-    vary_perf = "dynamic" in run_name
-
+    if type(perforation_mode[0]) == str:
+        vary_perf = True
+    else:
+        vary_perf = None
+    if perforation_mode[0] is None:
+        eval_modes = (None,)
+    if eval_modes is None:
+        eval_modes = (None,)
+    timeElapsed = 0
     if summarise:
-        summary(net, input_size=input_size)
+        summary(net, input_size=in_size)
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
     for epoch in range(max_epochs):
-        losses, train_accs = train(net, op, train_loader, device, loss_fn=loss_function, perforation=perforation_mode,
-                                   batch_size=batch_size,
-                                   run_name=run_name, grad_clip=grad_clip, vary_perf=vary_perf)
+        if reporting:
+            if file is not None:
+                print(f"\nEpoch {epoch} training:", file=file)
+            print(f"\nEpoch {epoch} training:")
+        torch.cuda.synchronize()
+        t0 = time.time()
+        losses, train_accs = train(net, op, train_loader, device, loss_fn=loss_function,
+                                   perforation_mode=perforation_mode,
+                                   batch_size=batch_size, perforation_type=perforation_type, pretrained=pretrained,
+                                   run_name=run_name, grad_clip=grad_clip, vary_perf=vary_perf, in_size=in_size)
+        torch.cuda.synchronize()
+        t1 = time.time()
+        timedelta = int((t1 - t0) * 1000) / 1000
+        timeElapsed += (t1 - t0)
         if reporting:
             if file is not None:
                 print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item(), file=file)
-                print(f"Epoch mean acc: {np.mean(train_accs).item()}", file=file)
+                print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s", file=file)
             print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item())
-            print(f"Epoch mean acc: {np.mean(train_accs).item()}")
+            print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s")
 
         for ind, mode in enumerate(eval_modes):
 
             print("\ntesting eval mode", mode)
             if file is not None:
                 print("\ntesting eval mode", mode, file=file)
-            valid_losses, valid_accs = validate(net=net, valid_loader=valid_loader, device=device, loss_fn=loss_function,
-                                          file=file, batch_size=batch_size, eval_mode=mode, reporting=reporting)
+            valid_losses, valid_accs = validate(net=net, valid_loader=valid_loader, device=device,
+                                                loss_fn=loss_function,
+                                                file=file, batch_size=batch_size, eval_mode=mode, reporting=reporting)
             # TODO net saving
             curr_loss = np.mean(valid_losses)
             if curr_loss < best_valid_losses[ind]:
@@ -307,29 +359,136 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             scheduler.step()
             print(", Current LR:", scheduler.get_last_lr()[0])
 
-    if test_loader is not None:
-        for ind, mode in enumerate(eval_modes):
-            # TODO load best model
-            net.eval()
-            if best_models[ind] is not None:
-                net.load_state_dict(best_models[ind])
-            if mode is not None:
-                net._set_perforation(mode)
-                # net._reset()
-            test_losses, test_accs = validate(net=net, valid_loader=test_loader, device=device, loss_fn=loss_function,
-                                            file=file, batch_size=batch_size, eval_mode=mode, reporting=reporting)
+    if test_loader is None:
+        test_loader = valid_loader
+    best_outputs = []
+    for ind, mode in enumerate(eval_modes):
+        net.eval()
+        if best_models[ind] is not None:
+            net.load_state_dict(best_models[ind])
+        if mode is not None:
+            net._set_perforation(mode)
+            # net._reset()
+        net.eval()
+        print("\nValidating eval mode", mode)
+        test_losses, test_accs = validate(net=net, valid_loader=test_loader, device=device, loss_fn=loss_function,
+                                          file=file, batch_size=batch_size, eval_mode=mode, reporting=reporting)
+        h = f"Validation loss ({mode}):" + str(np.mean(test_losses))
+        print(h)
+        best_outputs.append(h)
+        h2 = f"Validation acc ({mode}):" + str(np.mean(test_accs))
+        best_outputs.append(h2)
+        print(h2)
+    h3 = "Training time:" + str(timeElapsed) + " seconds"
+    print("Training time:", timeElapsed, " seconds")
+    best_outputs.append(h3)
+    return best_outputs
 
-            print("\nValidating eval mode", mode)
-            print("Validation loss:", np.mean(test_losses))
-            print("Validation acc:", np.mean(test_accs))
+
+def runAllTests():
+    device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+    architectures = [
+        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")],
+         ["cifar", "cinic", "ucihar"], [32]],
+        [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]]
+    ]
+
+    for version in architectures:  # classigication, segmetnationg
+        for dataset in version[1]:
+            if dataset == "agri":
+                lr = 0.01
+                max_epochs = 1  # 300
+                batch_size = 32
+            elif dataset == "ucihar":
+                max_epochs = 1  # 100
+                batch_size = 32
+                lr = 0.01
+            else:
+                max_epochs = 1  # 200
+                batch_size = 32
+                lr = 0.1
+
+            for model, modelname in version[0]:
+                for img in version[2]:
+                    img_res = (img, img)
+                    in_size = (2, 3, img, img)
+                    if img == 128:
+                        batch_size = 32
+                    elif img == 256:
+                        batch_size = 4  # 16
+                    elif img == 512:
+                        batch_size = 2  # 4
+                    alreadyNoPerf = False
+                    for perforation in (None, 2, 3, "random", "2by2_equivalent"):
+                        perf = (perforation, perforation)
+                        if perforation is None:
+                            if alreadyNoPerf:
+                                continue
+                            else:
+                                alreadyNoPerf = True
+
+                        for perf_type in ["perf", "dau"]:
+
+                            prefix = "allTests"
+                            name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
+                            curr_file = f"{name}"
+                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                                print("file for", curr_file, "already exists, skipping...")
+                                continue
+                            if "agri" in dataset:
+                                net = model(2).to(device)
+                            else:
+                                net = model(num_classes=10).to(device)
+
+                            op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
+                            train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
+                                                                                   image_resolution=img_res)
+                            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
+
+                            run_name = f"{curr_file}"
+                            if not os.path.exists(f"./{prefix}/"):
+                                os.mkdir(f"./{prefix}")
+                            print("starting run:", curr_file)
+
+                            with open(f"./{prefix}/{curr_file}.txt", "w") as f:
+                                best_out = benchmark(net, op, scheduler, train_loader=train_loader,
+                                                     valid_loader=valid_loader, test_loader=test_loader,
+                                                     max_epochs=max_epochs, device=device, perforation_mode=perf,
+                                                     run_name=run_name, batch_size=batch_size,
+                                                     eval_modes=[None, (2, 2), (3, 3)], in_size=in_size,
+                                                     perforation_type=perf_type, file=f, summarise=False)
+                            with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
+                                print(best_out, file=ff)
+
 
 if __name__ == "__main__":
+    runAllTests()
+    quit()
+    net = torchvision.models.resnet18(num_classes=10)
+    perfDAU(net, (2, 3, 32, 32))
+    net._set_perforation((1, 3))
+    net._reset()
+    quit(123)
+
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
-    net = UNet(2)
+    architectures = [resnet18, mobilenet_v2, mobilenet_v3_small, UNet, UNetCustom]
+    net = architectures[0](num_classes=10)
     net.train()
+    # perfPerf(net)
+    # perfDAU(net)
+    max_epochs = 2
+    dataset = "ucihar"
+    batch_size = 32
+    img_res = (128, 128)
+    in_size = img_res if "agri" in dataset.lower() else (32, 32)
+    in_size = (2, 3, in_size[0], in_size[1])
     op = torch.optim.Adam(net.parameters(), lr=0.001)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(op, 0.99)
-    train_loader, valid_loader, test_loader = get_datasets("agri", 1, True, image_resolution=(128,128))
-    print("Datasets loaded, training...")
+    op = torch.optim.SGD(net.parameters(), lr=0.01, weight_decay=0.0005)
+    # scheduler = torch.optim.lr_scheduler.ExponentialLR(op, 0.99)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
+    train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True, image_resolution=img_res)
+
+    run_name = "UCIHAR-test"  # TODO: setup run name
     benchmark(net, op, scheduler, train_loader=train_loader, valid_loader=valid_loader, test_loader=test_loader,
-        max_epochs=5, device=device, perforation_mode=None, run_name="ASDA")
+              max_epochs=max_epochs, device=device, perforation_mode=(3, 3), run_name=run_name, batch_size=batch_size,
+              eval_modes=[None, (2, 2), (3, 3)], in_size=in_size, perforation_type="perf")
