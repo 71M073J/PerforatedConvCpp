@@ -351,8 +351,8 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                 valid_accs.append(torch.sum(acc) / batch_size)
         if reporting:
             if file is not None:
-                print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}", file=file)
-            print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}")
+                print(f"Epoch mean acc: {np.mean(valid_accs)}, loss: {np.mean(valid_losses)}", file=file)
+            print(f"Epoch mean acc: {np.mean(valid_accs)}, loss: {np.mean(valid_losses)}")
         # ep_valid_losses.append(l2.item() / (i + 1))
     ims = (max_im, min_im)
     if train_mode is not None:
