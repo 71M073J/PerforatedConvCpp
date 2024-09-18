@@ -592,7 +592,7 @@ def runAllTests():
                                 plt.clf()
                             with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                                 print(best_out, file=ff)
-                                quit()
+
 
 
 if __name__ == "__main__":
