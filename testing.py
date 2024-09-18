@@ -4,7 +4,7 @@ import time
 #from Architectures.mobilenetv2 import MobileNetV2
 #from Architectures.mobilenetv3 import mobilenet_v3_small
 #from Architectures.PerforatedConv2d import PerforatedConv2d
-from conv import PerforatedConv2d
+#from conv import PerforatedConv2d, DownActivUp
 import torch
 #device = "cuda:0"
 #perforation_mode = (3,1)

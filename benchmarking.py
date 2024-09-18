@@ -472,14 +472,14 @@ def runAllTests():
             if dataset == "agri":
                 loss_fn = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.1, 0.9])).to(device)
                 lr = 0.01
-                max_epochs = 1  # 300
+                max_epochs = 300
                 batch_size = 32
             elif dataset == "ucihar":
-                max_epochs = 1  # 100
+                max_epochs = 100
                 batch_size = 32
                 lr = 0.01
             else:
-                max_epochs = 1  # 200
+                max_epochs = 200
                 batch_size = 32
                 lr = 0.1
 
@@ -601,31 +601,3 @@ if __name__ == "__main__":
     random.seed(123)
     runAllTests()
     quit()
-    net = torchvision.models.resnet18(num_classes=10)
-    perfDAU(net, (2, 3, 32, 32))
-    net._set_perforation((1, 3))
-    net._reset()
-    quit(123)
-
-    device = "cpu" if not torch.cuda.is_available() else "cuda:0"
-    architectures = [resnet18, mobilenet_v2, mobilenet_v3_small, UNet, UNetCustom]
-    net = architectures[0](num_classes=10)
-    net.train()
-    # perfPerf(net)
-    # perfDAU(net)
-    max_epochs = 2
-    dataset = "ucihar"
-    batch_size = 32
-    img_res = (128, 128)
-    in_size = img_res if "agri" in dataset.lower() else (32, 32)
-    in_size = (2, 3, in_size[0], in_size[1])
-    op = torch.optim.Adam(net.parameters(), lr=0.001)
-    op = torch.optim.SGD(net.parameters(), lr=0.01, weight_decay=0.0005)
-    # scheduler = torch.optim.lr_scheduler.ExponentialLR(op, 0.99)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
-    train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True, image_resolution=img_res)
-
-    run_name = "test"
-    benchmark(net, op, scheduler, train_loader=train_loader, valid_loader=valid_loader, test_loader=test_loader,
-              max_epochs=max_epochs, device=device, perforation_mode=(3, 3), run_name=run_name, batch_size=batch_size,
-              eval_modes=[None, (2, 2), (3, 3)], in_size=in_size, perforation_type="perf")
