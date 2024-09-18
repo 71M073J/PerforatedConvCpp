@@ -331,7 +331,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                         min_im = (classes[farthest][0].detach().cpu(), pred[farthest][0].detach().cpu())
                 calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
                 acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
-                valid_accs.append(acc)
+                valid_accs.append(acc.detach().cpu())
 
             else:
                 if best_worst:
@@ -347,12 +347,14 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                     if farthest_score < min_dist:
                         min_dist = farthest_score
                         min_ind = farthest
+
                 acc = (softm.argmax(dim=1) == classes)
-                valid_accs.append(torch.sum(acc) / batch_size)
+                valid_accs.append(torch.sum(acc).detach().cpu() / batch_size)
+
         if reporting:
             if file is not None:
-                print(f"Epoch mean acc: {np.mean(valid_accs)}, loss: {np.mean(valid_losses)}", file=file)
-            print(f"Epoch mean acc: {np.mean(valid_accs)}, loss: {np.mean(valid_losses)}")
+                print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}", file=file)
+            print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}")
         # ep_valid_losses.append(l2.item() / (i + 1))
     ims = (max_im, min_im)
     if train_mode is not None:
