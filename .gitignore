@@ -327,3 +327,4 @@ outputs_unet.txt
 res
 test.png
 timing
+allTests

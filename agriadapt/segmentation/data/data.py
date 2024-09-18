@@ -28,6 +28,7 @@ class ImageDataset(Dataset):
         self.y = y
         self.transform=transform
         self.tf = transforms.ToImage()
+
     def __len__(self):
         return len(self.X)
 
@@ -35,7 +36,6 @@ class ImageDataset(Dataset):
         #print(self.X[item].shape)
         #print(self.y[item].shape)
         #print(self.tf(self.y[item]).shape)
-        #
         return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
 
 class ImageImporter:
@@ -300,8 +300,8 @@ class ImageImporter:
                 self.project_path / data_dir / split / "images/" / file_name
             )
             if self.smaller:
-                smaller = transforms.Resize(self.smaller)
-                img = smaller(img)
+                smaller_transform = transforms.Resize(self.smaller)
+                img = smaller_transform(img)
             tens = create_tensor(img)
             X.append(tens)
             sizes = "512_512" if not self.smaller else f"{self.smaller[0]}_{self.smaller[1]}"
@@ -339,15 +339,15 @@ class ImageImporter:
                             mask[class_id][pixel[0]][pixel[1]] = 1
                 #print("Saving mask...")
                 y.append(mask)
-                if self.smaller:
-                    smaller = transforms.Resize(self.smaller)
-                    torch.save(smaller(mask), self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
+                if type(self.smaller) == tuple:
+                    smaller_transform = transforms.Resize(self.smaller)
+                    torch.save(smaller_transform(mask), self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
                 else:
                     torch.save(mask, self.project_path / data_dir / split / f"labels/{i}_{sizes}.label")
 
             else:
                 #print("it exists ffs")
-                y.append(torch.load(self.project_path / data_dir / split / f"labels/{i}_{sizes}.label"))
+                y.append(torch.load(self.project_path / data_dir / split / f"labels/{i}_{sizes}.label", weights_only=True))
 
         return ImageDataset(X, y, transform)
 
