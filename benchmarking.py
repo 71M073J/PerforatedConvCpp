@@ -574,7 +574,7 @@ def runAllTests():
                                                         for i, (mx, mn) in enumerate(inds)], dim=2)
                                 else:
                                     imgs = torch.cat(
-                                        [torch.cat(transforms.ToImage(valid_loader.dataset[mx][0], valid_loader.dataset[mn][0]), dim=dims[0])
+                                        [torch.cat(transforms.ToImage()(valid_loader.dataset[mx][0], valid_loader.dataset[mn][0]), dim=dims[0])
                                          for
                                          (mx, mn) in inds], dim=dims[1])
                                 if imgs.shape[0] == 3:
