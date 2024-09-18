@@ -264,7 +264,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
         op.step()
         op.zero_grad()
-        if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:  # TODO UCIHAR
+        if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
             # print("Should be here")
             acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
             train_accs.append(torch.sum(acc) / batch_size)
@@ -273,8 +273,6 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
             train_accs.append(acc)
             ...
-            # Assuming segmentation
-            # TODO TODO
 
         # entropy = Categorical(
         #    probs=torch.maximum(F.softmax(pred.detach().cpu(), dim=1), torch.tensor(1e-12)))  # F.softmax(pred.detach().cpu(), dim=1)
@@ -402,9 +400,10 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             if file is not None:
                 print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item(), file=file)
                 print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s", file=file)
-            print(results) #TODO
+                print(results, file=file)
             print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item())
             print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s")
+            print(results)
 
         for ind, mode in enumerate(eval_modes):
 
@@ -484,17 +483,17 @@ def runAllTests():
 
             for model, modelname in version[0]:
                 for img in version[2]:
-                    model = UNet
-                    img = 128 #TODO
-                    dataset = "agri" #TODO
+                    #model = UNet
+                    #img = 128
+                    #dataset = "agri"
                     img_res = (img, img)
                     in_size = (2, 3, img, img)
                     if img == 128:
                         batch_size = 32
                     elif img == 256:
-                        batch_size = 4  # 16
+                        batch_size = 16
                     elif img == 512:
-                        batch_size = 2  # 4
+                        batch_size = 4
 
                     alreadyNoPerf = False
                     for perforation in (None, 2, 3, "random", "2by2_equivalent"):
@@ -624,7 +623,7 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
     train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True, image_resolution=img_res)
 
-    run_name = "UCIHAR-test"  # TODO: setup run name
+    run_name = "test"
     benchmark(net, op, scheduler, train_loader=train_loader, valid_loader=valid_loader, test_loader=test_loader,
               max_epochs=max_epochs, device=device, perforation_mode=(3, 3), run_name=run_name, batch_size=batch_size,
               eval_modes=[None, (2, 2), (3, 3)], in_size=in_size, perforation_type="perf")
