@@ -531,7 +531,6 @@ def runAllTests():
                                                            eval_modes=eval_modes, in_size=in_size,
                                                            perforation_type=perf_type, file=f, summarise=False)
 
-
                                 if not "agri" in dataset:
                                     n_samp = len((test_loader if test_loader is not None else valid_loader).dataset)
                                     fig, ax = plt.subplots(len(confs), 1, figsize=(5, 15) if len(confs) != 1 else (6,5))
