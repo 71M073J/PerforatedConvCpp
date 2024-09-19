@@ -226,7 +226,6 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     train_accs = []
     losses = []
     # entropies = 0
-    # TODO class_accs = np.zeros((2, 15))
     weights = []
 
     for i, (batch, classes) in enumerate(data_loader):
@@ -248,7 +247,6 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
             # print("Should be here")
             acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
-            #TODO make confusion matrix
             train_accs.append(torch.sum(acc) / batch_size)
         else:
             calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
@@ -265,24 +263,16 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     return losses, train_accs, results
 
 
-def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name, best_worst=False):
+def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name):
     train_mode = None
     valid_losses = []
     valid_accs = []
-    if best_worst:
-        max_im = (torch.zeros_like(valid_loader.dataset[0][0]), torch.zeros_like(valid_loader.dataset[0][0][0]))
-        min_im = (torch.zeros_like(valid_loader.dataset[0][0]), torch.zeros_like(valid_loader.dataset[0][0][0]))
-    else:
-        max_im = 0
-        min_im = 0
     results = {}
+    conf = torch.zeros((10,10), device=device)
     # ep_valid_losses = []
     net.eval()
     if hasattr(net, "_get_perforation"):
         train_mode = net._get_perforation()
-    max_dist = -99999
-    min_dist = 99999
-    max_ind, min_ind = -1, -1
     with torch.no_grad():
         if eval_mode is not None:
             net._set_perforation(eval_mode)
@@ -296,39 +286,12 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
             softm = F.softmax(pred, dim=1)
 
             if type(valid_loader.dataset) == AgriDataset:
-                if best_worst:
-                    nearness = torch.abs(softm - classes)
-                    suma = nearness.sum(dim=(1,2,3))
-                    nearthest = suma.argmax()
-                    nearthest_score = suma.max()
-                    farthest = suma.argmin()
-                    farthest_score = suma.min()
-                    if nearthest_score > max_dist:
-                        max_dist = nearthest_score
-                        max_ind = nearthest + i * batch_size
-                        max_im = (classes[nearthest][0].detach().cpu(), pred[nearthest][0].detach().cpu())
-                    if farthest_score < min_dist:
-                        min_dist = farthest_score
-                        min_ind = farthest + i * batch_size
-                        min_im = (classes[farthest][0].detach().cpu(), pred[farthest][0].detach().cpu())
                 calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
                 acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
                 valid_accs.append(acc.detach().cpu())
 
             else:
-                if best_worst:
-                    nearness = torch.abs(softm - torch.nn.functional.one_hot(classes.long(), num_classes=10))
-                    suma = nearness.sum(dim=1)
-                    nearthest = suma.argmax() + i * batch_size
-                    nearthest_score = suma.max()
-                    farthest = suma.argmin() + i * batch_size
-                    farthest_score = suma.min()
-                    if nearthest_score > max_dist:
-                        max_dist = nearthest_score
-                        max_ind = nearthest
-                    if farthest_score < min_dist:
-                        min_dist = farthest_score
-                        min_ind = farthest
+                conf[softm.argmax(dim=1), classes] += 1
 
                 acc = (softm.argmax(dim=1) == classes)
                 valid_accs.append(torch.sum(acc).detach().cpu() / batch_size)
@@ -338,14 +301,13 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                 print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}", file=file)
             print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}")
         # ep_valid_losses.append(l2.item() / (i + 1))
-    ims = (max_im, min_im)
     if train_mode is not None:
         #print("returning to train mode", train_mode)
         net._set_perforation(train_mode)
         # print(train_mode, flush=True)
         # net._reset()
 
-    return valid_losses, valid_accs, (max_ind, min_ind), results, ims
+    return valid_losses, valid_accs, results, conf.detach().cpu()
 
 
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
@@ -371,11 +333,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         # net._reset()
     print(f"starting run {run_name}...")
     timeElapsed = 0
+    confs = []
     if summarise:
         summary(net, input_size=in_size)
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
-    imss = []
     for epoch in range(max_epochs):
         if reporting:
             if file is not None:
@@ -405,7 +367,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             print("\ntesting eval mode", mode)
             if file is not None:
                 print("\ntesting eval mode", mode, file=file)
-            valid_losses, valid_accs, (max_ind, min_ind), allMetrics, ims = validate(net=net, valid_loader=valid_loader, device=device,
+            valid_losses, valid_accs, allMetrics, ims = validate(net=net, valid_loader=valid_loader, device=device,
                                                                     loss_fn=loss_function,
                                                                     file=file, batch_size=batch_size, eval_mode=mode,
                                                                     run_name=run_name, reporting=reporting)
@@ -420,7 +382,6 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     if test_loader is None:
         test_loader = valid_loader
     best_outputs = []
-    best_worst_ind = []
     if eval_modes is None:
         eval_modes = (None,)
     for ind, mode in enumerate(eval_modes):
@@ -432,12 +393,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             # net._reset()
         net.eval()
         print("\nValidating eval mode", mode)
-        test_losses, test_accs, indexes, allMetrics, ims = validate(net=net, valid_loader=test_loader, device=device,
-                                                   loss_fn=loss_function,
-                                                   file=file, batch_size=batch_size, eval_mode=mode,
-                                                   reporting=reporting, run_name=run_name, best_worst=True)
-        imss.append(ims)
-        best_worst_ind.append(indexes)
+        test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
+                                                                     loss_fn=loss_function,
+                                                                     file=file, batch_size=batch_size, eval_mode=mode,
+                                                                     reporting=reporting, run_name=run_name)
+        confs.append(conf)
         h = f"Validation loss ({mode}):" + str(np.mean(test_losses))
         print(h)
         best_outputs.append(h)
@@ -447,7 +407,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     h3 = "Training time:" + str(timeElapsed) + " seconds"
     print("Training time:", timeElapsed, " seconds")
     best_outputs.append(h3)
-    return best_outputs, best_worst_ind, imss
+    return best_outputs, confs
 
 
 def runAllTests():
@@ -548,11 +508,11 @@ def runAllTests():
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
                             #continue
+
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
 
-                            dims = [x for x in [0, 1, 2] if x != np.argmin(valid_loader.dataset[0][0].shape)]
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
 
                             run_name = f"{curr_file}"
@@ -563,46 +523,53 @@ def runAllTests():
                             print("starting run:", curr_file)
 
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
-
-                                best_out, inds, ims = benchmark(net, op, scheduler, train_loader=train_loader,
+                                #max_epochs = 1 #TODO REMOVE
+                                best_out, confs = benchmark(net, op, scheduler, train_loader=train_loader,
                                                            valid_loader=valid_loader, test_loader=test_loader,
                                                            max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                            run_name=run_name, batch_size=batch_size, loss_function=loss_fn,
                                                            eval_modes=eval_modes, in_size=in_size,
                                                            perforation_type=perf_type, file=f, summarise=False)
 
-                                try:
-                                    valid_loader.dataset.transform.transforms = [transforms.Resize(img)]
-                                except:
-                                    try:
-                                        valid_loader.dataset.tf.transforms = [transforms.Resize(img)]
-                                    except:
-                                        try:
-                                            valid_loader.dataset.trans.transforms = [transforms.Resize(img)]
-                                        except:
-                                            pass
-                                if "agri" in dataset:
-                                    imgs = torch.cat([torch.cat((torch.cat((valid_loader.dataset[mx][0], torch.tile(torch.cat((ims[i][0][0], ims[i][0][1]), dim=1), dims=(3,1,1))), dim=2),
-                                                                 torch.cat((valid_loader.dataset[mn][0], torch.tile(torch.cat((ims[i][1][0], ims[i][1][1]), dim=1), dims=(3,1,1))), dim=2)), dim=1)
-                                                        for i, (mx, mn) in enumerate(inds)], dim=2)
+
+                                if not "agri" in dataset:
+                                    n_samp = len((test_loader if test_loader is not None else valid_loader).dataset)
+                                    fig, ax = plt.subplots(len(confs), 1, figsize=(5, 15) if len(confs) != 1 else (6,5))
+                                    if len(confs) == 1:
+                                        ax = [ax]
+                                    h = torch.cat(confs, dim=1) / n_samp
+                                    mins, maxs = h.min().item(), h.max().item()
+                                    # print(mins, maxs, n_samp, confs)
+                                    for i, conf in enumerate(confs):
+                                        imlast = ax[i].imshow((conf / n_samp) * 100, vmin=mins * 100, vmax=maxs * 100)
+                                        if perf_type is not None:
+                                            ax[i].set_title(f"Perforation mode {eval_modes[i]}")
+                                        else:
+                                            ax[0].set_title("No perforation")
+
+                                        ax[i].set_xticks([0], [""])
+                                        ax[i].set_yticks(list(range(10)),
+                                                         ["airplane", "automobile", "bird", "cat", "deer", "dog",
+                                                          "frog", "horse", "ship", "truck"])
+                                    ax[-1].set_xticks(list(range(10)),
+                                                      ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog",
+                                                       "horse", "ship", "truck"], rotation=90)
+
+                                    # add space for colour bar
+                                    if len(confs) == 1:
+                                        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
+                                        cbar_ax = fig.add_axes([0.85, 0.2, 0.04, 0.7])
+
+                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
+                                    else:
+                                        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
+                                        cbar_ax = fig.add_axes([0.82, 0.4, 0.02, 0.3])
+                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
+                                    plt.savefig(f"./{prefix}/imgs/{curr_file}.png")
+                                    plt.clf()
                                 else:
-                                    imgs = torch.cat(
-                                        [torch.cat(transforms.ToImage()(valid_loader.dataset[mx][0], valid_loader.dataset[mn][0]), dim=dims[0])
-                                         for
-                                         (mx, mn) in inds], dim=dims[1])
-                                if imgs.shape[0] == 3:
-                                    # print("wtf?")
-                                    imgs = imgs.movedim(0, -1)
-                                plt.imshow(imgs)
-                                if perf_type is not None:
-                                    plt.title("Perforation mode\n" + str(" "*28).join(
-                                        [str(x) if type(x) != tuple else (str(x[0]) + "x" + str(x[1])) for x in
-                                         eval_modes]))
-                                else:
-                                    plt.title("No perforation")
-                                plt.ylabel("Best img                Worst img")
-                                plt.savefig(f"./{prefix}/imgs/{curr_file}.png")
-                                plt.clf()
+                                    #TODO print IoUs
+                                    ...
                             with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                                 print(best_out, file=ff)
 

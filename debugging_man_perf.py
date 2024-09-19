@@ -1,37 +1,41 @@
+import matplotlib.pyplot as plt
 import torch
-import torchvision
-from perforateCustomNet import perforate_net_perfconv, perforate_net_downActivUp
-from benchmarking import get_datasets, benchmark
-from Architectures.resnet import resnet18
 import numpy as np
-import random
-device = "cuda:0"
-torch.manual_seed(123)
-np.random.seed(123)
-random.seed(123)
+h = torch.randn((10,10)) * 100
+eval_modes = [None, (2,2), (3,3)]
+for confs in [[h], [h,h,h]]:
+    if len(confs) == 1:
+        perf_type = None
+    else:
+        perf_type = False
 
-if __name__ == "__main__":
-    for i in range(2):
-        if i == 0:
-            net = torchvision.models.resnet18(num_classes=10)
-            perforate_net_downActivUp(net, perforation_mode=(2,2), in_size=(32,32))
-            #print(net)
-            run_name = "function_perf"
+    n_samp = 10000
+    fig, ax = plt.subplots(len(confs), 1, figsize=(5, 15) if len(confs) != 1 else (6,5))
+    if len(confs) == 1:
+        ax = [ax]
+    h=torch.cat(confs, dim=1)/n_samp
+    mins, maxs = h.min().item(), h.max().item()
+    #print(mins, maxs, n_samp, confs)
+    for i, conf in enumerate(confs):
+        imlast = ax[i].imshow((conf/n_samp)*100, vmin=mins*100, vmax=maxs*100)
+        if perf_type is not None:
+            ax[i].set_title(f"Perforation mode {eval_modes[i]}")
         else:
-            continue
-            net = resnet18(num_classes=10, perforation_mode=(2,2))
-            #print(net)
-            run_name = "manual_perf"
-        ######### brez tega dvojega je funcperf == manual
-        perforation_mode = (2,2)
-        perforation_type="dau"
-        #########
-        net.to(device)
-        img_res = (32,32)
-        in_size=(2,3,32,32)
-        train_l, valid_l, _ = get_datasets("cifar", batch_size=32, augment=True, image_resolution=img_res)
-        op = torch.optim.SGD(net.parameters(), lr=0.1, weight_decay=0.0005)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=200)
-        benchmark(net, op, scheduler=scheduler, max_epochs=5, train_loader=train_l, valid_loader=valid_l, device=device,
-                  run_name=run_name, perforation_mode=perforation_mode, eval_modes=[None, (2,2), (3,3)], summarise=False,
-                  in_size=in_size, perforation_type=perforation_type, batch_size=32)
+            ax[0].set_title("No perforation")
+
+        ax[i].set_xticks([0], [""])
+        ax[i].set_yticks(list(range(10)), ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"])
+    ax[-1].set_xticks(list(range(10)),
+                     ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog",
+                      "horse", "ship", "truck"], rotation=90)
+
+    # add space for colour bar
+    if len(confs) == 1:
+        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
+        cbar_ax = fig.add_axes([0.85, 0.2, 0.04, 0.7])
+
+        c = plt.colorbar(imlast, cax=cbar_ax, ticks = [mins*100, maxs*100])
+    else:
+        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
+        cbar_ax = fig.add_axes([0.82, 0.4, 0.02, 0.3])
+        c = plt.colorbar(imlast, cax=cbar_ax, ticks = [mins*100, maxs*100])
