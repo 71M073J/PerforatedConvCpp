@@ -221,8 +221,9 @@ def add_functs(net):
     net._get_total_n_calc = MethodType(_get_total_n_calc, net)
 
 
-def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=False,
+def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
                            in_size=(2, 3, 512, 512)):
+    print("perforating network to ", perforation_mode, " perf")
     if len(in_size) == 2:
         in_size = (2, 3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)
@@ -233,8 +234,9 @@ def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,
     net._reset()
 
 
-def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=False,
+def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
                               verbose=False):
+    print("perforating network to ", perforation_mode, " DAU")
     if len(in_size) == 2:
         in_size = (2, 3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)

@@ -219,36 +219,16 @@ def get_perfs(perforation_mode, n_conv):
 
 
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
-          perforation_mode, pretrained, in_size):
-    if perforation_type is None:
-        perforation_type = "perf"
+          perforation_mode, n_conv=0):
 
     net.train()
     results = {}
-    n_conv = 0
     train_accs = []
     losses = []
     # entropies = 0
     # TODO class_accs = np.zeros((2, 15))
     weights = []
-    if hasattr(net, "_set_perforation") and type(perforation_mode[0]) == int:
-        n_conv = len(net._get_n_calc())
-        net._set_perforation(perforation_mode)
-        net._reset()
-    elif perforation_mode[0] is not None:
-        if type(perforation_mode[0]) == int:
-            if "dau" in perforation_type.lower():
-                perfDAU(net, in_size=in_size, perforation_mode=perforation_mode, pretrained=pretrained)
-            elif "perf" in perforation_type.lower():
-                perfPerf(net, in_size=in_size, perforation_mode=perforation_mode, pretrained=pretrained)
-        else:
-            if "dau" in perforation_type.lower():
-                perfDAU(net, in_size=in_size, perforation_mode=(1, 1), pretrained=pretrained)
-            elif "perf" in perforation_type.lower():
-                perfPerf(net, in_size=in_size, perforation_mode=(1, 1), pretrained=pretrained)
-        n_conv = len(net._get_n_calc())
-        net._set_perforation(get_perfs(perforation_mode, n_conv))
-        # net._reset()
+
     for i, (batch, classes) in enumerate(data_loader):
         if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
             perfs = get_perfs(perforation_mode[0], n_conv)
@@ -268,6 +248,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
             # print("Should be here")
             acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
+            #TODO make confusion matrix
             train_accs.append(torch.sum(acc) / batch_size)
         else:
             calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
@@ -359,17 +340,21 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
         # ep_valid_losses.append(l2.item() / (i + 1))
     ims = (max_im, min_im)
     if train_mode is not None:
+        #print("returning to train mode", train_mode)
         net._set_perforation(train_mode)
         # print(train_mode, flush=True)
         # net._reset()
+
     return valid_losses, valid_accs, (max_ind, min_ind), results, ims
 
 
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
-              perforation_mode=(2, 2), perforation_type="dau",
+              perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
-              summarise=True, pretrained=False,
+              summarise=True, pretrained=True,
               device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
+    if type(perforation_mode) not in [tuple, list]:
+        perforation_mode = (perforation_mode, perforation_mode)
     if type(perforation_mode[0]) == str:
         vary_perf = True
     else:
@@ -378,6 +363,13 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         eval_modes = (None,)
     if eval_modes is None:
         eval_modes = (None,)
+    n_conv=0
+
+
+        #n_conv = len(net._get_n_calc())
+        #net._set_perforation(get_perfs(perforation_mode, n_conv))
+        # net._reset()
+    print(f"starting run {run_name}...")
     timeElapsed = 0
     if summarise:
         summary(net, input_size=in_size)
@@ -392,9 +384,9 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         torch.cuda.synchronize()
         t0 = time.time()
         losses, train_accs, results = train(net, op, train_loader, device, loss_fn=loss_function,
-                                   perforation_mode=perforation_mode,
-                                   batch_size=batch_size, perforation_type=perforation_type, pretrained=pretrained,
-                                   run_name=run_name, grad_clip=grad_clip, vary_perf=vary_perf, in_size=in_size)
+                                            perforation_mode=perforation_mode,
+                                            batch_size=batch_size, perforation_type=perforation_type, run_name=run_name,
+                                            grad_clip=grad_clip, vary_perf=vary_perf, n_conv=n_conv)
         torch.cuda.synchronize()
         t1 = time.time()
         timedelta = int((t1 - t0) * 1000) / 1000
@@ -466,6 +458,8 @@ def runAllTests():
         [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]]
     ]
 
+    eval_modes = [None, (2, 2), (3, 3)]
+
     for version in architectures:  # classigication, segmetnationg
         for dataset in version[1]:
 
@@ -483,6 +477,7 @@ def runAllTests():
                 max_epochs = 200
                 batch_size = 32
                 lr = 0.1
+
 
             for model, modelname in version[0]:
                 for img in version[2]:
@@ -523,24 +518,41 @@ def runAllTests():
                                 net = model(2).to(device)
                             else:
                                 net = model(num_classes=10).to(device)
+                            pretrained=True
+                            if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
+                                if type(perf[0]) != str:  # is perf mode not a string
+                                    if "dau" in perf_type.lower():
+                                        perfDAU(net, in_size=in_size, perforation_mode=perf,
+                                                pretrained=pretrained)
+                                    elif "perf" in perf_type.lower():
+                                        perfPerf(net, in_size=in_size, perforation_mode=perf,
+                                                 pretrained=pretrained)
+                                else:  # it is a string
+                                    if "dau" in perf_type.lower():
+                                        perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
+                                                pretrained=pretrained)
+                                    elif "perf" in perf_type.lower():
+                                        perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
+                                                 pretrained=pretrained)
 
+                            if dataset == "cifar" and perf_type == "dau":
+                                lr /= 10
+                            print("net:", modelname)
+                            print("Dataset:", dataset)
+                            print(max_epochs, "epochs")
+                            print("perforation mode", perf)
+                            print("perforation type:", perf_type)
+                            print("batch_size:", batch_size)
+                            print("loss fn", loss_fn)
+                            print("eval modes", eval_modes)
+                            print("Learning rate:", lr)
+                            print("run name:", curr_file)
+                            #continue
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
 
                             dims = [x for x in [0, 1, 2] if x != np.argmin(valid_loader.dataset[0][0].shape)]
-                            #print(dims)
-                            #h = torch.cat(
-                            #         (valid_loader.dataset[0][1][0],
-                            #          valid_loader.dataset[1][1][0]),
-                            #         dim=1)
-                            #lab = torch.tile(h, (3, 1, 1))#.movedim(0,-1)
-                            #print(lab.shape)
-                            #im = torch.cat((valid_loader.dataset[0][0], valid_loader.dataset[1][0]), dim=2)
-                            #print(im.shape)
-                            #im2 = torch.cat((im, lab), dim=1)
-                            #print(im2.shape)
-                            #quit()
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
 
                             run_name = f"{curr_file}"
@@ -551,7 +563,7 @@ def runAllTests():
                             print("starting run:", curr_file)
 
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
-                                eval_modes = [None, (2, 2), (3, 3)]
+
                                 best_out, inds, ims = benchmark(net, op, scheduler, train_loader=train_loader,
                                                            valid_loader=valid_loader, test_loader=test_loader,
                                                            max_epochs=max_epochs, device=device, perforation_mode=perf,
