@@ -223,6 +223,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     if perforation_type is None:
         perforation_type = "perf"
 
+    net.train()
     results = {}
     n_conv = 0
     train_accs = []
