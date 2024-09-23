@@ -73,8 +73,9 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
                        transforms.RandomHorizontalFlip()])
     else:
         if augment:
-            tf.extend([transforms.RandomChoice([transforms.RandomCrop(size=image_resolution[0], padding=int(image_resolution[0]/8)),
-                                                transforms.RandomResizedCrop(size=image_resolution[0])]),
+            tf.extend([transforms.RandomChoice(
+                [transforms.RandomCrop(size=image_resolution[0], padding=int(image_resolution[0] / 8)),
+                 transforms.RandomResizedCrop(size=image_resolution[0])]),
                        transforms.RandomHorizontalFlip()])
     if data == "cinic":
         tf.append(transforms.RandomRotation(45))
@@ -99,12 +100,12 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         train = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
                 root='./data', train=True, download=True, transform=tf), batch_size=batch_size, shuffle=True,
-            num_workers=num_workers,generator=g,)
+            num_workers=num_workers, generator=g, )
 
         valid = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
                 root='./data', train=False, download=True, transform=tf), batch_size=batch_size, shuffle=False,
-            num_workers=num_workers,generator=g,)
+            num_workers=num_workers, generator=g, )
     elif "agri" in data:
         print(image_resolution)
         tf.append(transforms.RandomRotation(45))
@@ -124,9 +125,11 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
             smaller=image_resolution, transform=tf
         ).get_dataset()
         train, valid, test = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True,
-                                                         num_workers=num_workers,generator=g,), \
-            torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers,generator=g,), \
-            torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers,generator=g,)
+                                                         num_workers=num_workers, generator=g, ), \
+            torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+                                        generator=g, ), \
+            torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+                                        generator=g, )
     elif data == "ucihar" or ("uci" in data.lower() and "har" in data.lower()):
         # UCIHAR is already normalised - kinda
         # "but we can still do it"
@@ -138,9 +141,9 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         tf = transforms.Compose(tf)
 
         train = torch.utils.data.DataLoader(UciHAR("train", transform=tf), batch_size=batch_size, shuffle=True,
-                                            num_workers=num_workers,generator=g,)
+                                            num_workers=num_workers, generator=g, )
         valid = torch.utils.data.DataLoader(UciHAR("test", transform=tf), batch_size=batch_size, shuffle=False,
-                                            num_workers=num_workers,generator=g,)
+                                            num_workers=num_workers, generator=g, )
     else:
         raise ValueError("Not supported dataset")
 
@@ -182,7 +185,6 @@ def calculate_segmentation_metrics(y_true, y_pred, name, metrics, device, result
 
 
 def get_perfs(perforation_mode, n_conv):
-
     if type(perforation_mode) == tuple:
         perforation_mode = perforation_mode[0]
     if type(perforation_mode) == int:
@@ -223,7 +225,6 @@ def get_perfs(perforation_mode, n_conv):
 
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
           perforation_mode, n_conv=0):
-
     net.train()
     results = {}
     train_accs = []
@@ -272,7 +273,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     valid_accs = []
     results = {}
     sz = 6 if dataset == "ucihar" else 10
-    conf = torch.zeros((sz,sz), device=device)
+    conf = torch.zeros((sz, sz), device=device)
     # ep_valid_losses = []
     net.eval()
     if hasattr(net, "_get_perforation"):
@@ -307,7 +308,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
             print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}")
         # ep_valid_losses.append(l2.item() / (i + 1))
     if train_mode is not None:
-        #print("returning to train mode", train_mode)
+        # print("returning to train mode", train_mode)
         net._set_perforation(train_mode)
         # print(train_mode, flush=True)
         # net._reset()
@@ -330,12 +331,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         eval_modes = (None,)
     if eval_modes is None:
         eval_modes = (None,)
-    n_conv=0
+    n_conv = 0
 
-
-        #n_conv = len(net._get_n_calc())
-        #net._set_perforation(get_perfs(perforation_mode, n_conv))
-        # net._reset()
+    # n_conv = len(net._get_n_calc())
+    # net._set_perforation(get_perfs(perforation_mode, n_conv))
+    # net._reset()
     print(f"starting run {run_name}...")
     timeElapsed = 0
     confs = []
@@ -373,9 +373,10 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             if file is not None:
                 print("\ntesting eval mode", mode, file=file)
             valid_losses, valid_accs, allMetrics, ims = validate(net=net, valid_loader=valid_loader, device=device,
-                                                                    loss_fn=loss_function,
-                                                                    file=file, batch_size=batch_size, eval_mode=mode,
-                                                                    run_name=run_name, reporting=reporting, dataset=dataset)
+                                                                 loss_fn=loss_function,
+                                                                 file=file, batch_size=batch_size, eval_mode=mode,
+                                                                 run_name=run_name, reporting=reporting,
+                                                                 dataset=dataset)
             curr_loss = np.mean(valid_losses)
             if curr_loss < best_valid_losses[ind]:
                 best_valid_losses[ind] = curr_loss
@@ -400,9 +401,9 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         net.eval()
         print("\nValidating eval mode", mode)
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
-                                                                     loss_fn=loss_function,
-                                                                     file=file, batch_size=batch_size, eval_mode=mode,
-                                                                     reporting=reporting, run_name=run_name, dataset=dataset)
+                                                            loss_fn=loss_function,
+                                                            file=file, batch_size=batch_size, eval_mode=mode,
+                                                            reporting=reporting, run_name=run_name, dataset=dataset)
         metrics.append(allMetrics)
         confs.append(conf)
         h = f"Validation loss ({mode}):" + str(np.mean(test_losses))
@@ -421,7 +422,8 @@ def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     architectures = [
         [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")],
-         ["cifar", "ucihar"], [32]],#"cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
+         ["cifar", "ucihar"], [32]],
+        # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
         [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]]
     ]
 
@@ -445,12 +447,11 @@ def runAllTests():
                 batch_size = 32
                 lr = 0.01
 
-
             for model, modelname in version[0]:
                 for img in version[2]:
-                    #model = UNet
-                    #img = 128
-                    #dataset = "agri"
+                    # model = UNet
+                    # img = 128
+                    # dataset = "agri"
                     img_res = (img, img)
                     in_size = (2, 3, img, img)
                     if img == 128:
@@ -485,7 +486,7 @@ def runAllTests():
                                 net = model(2).to(device)
                             else:
                                 net = model(num_classes=10).to(device)
-                            pretrained=True
+                            pretrained = True
                             if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
                                 if type(perf[0]) != str:  # is perf mode not a string
                                     if "dau" in perf_type.lower():
@@ -502,7 +503,7 @@ def runAllTests():
                                         perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
                                                  pretrained=pretrained)
 
-                            #if (dataset == "cifar" and perf_type == "dau") or mo:
+                            # if (dataset == "cifar" and perf_type == "dau") or mo:
                             #    lr /= 10
                             print("net:", modelname)
                             print("Dataset:", dataset)
@@ -514,9 +515,8 @@ def runAllTests():
                             print("eval modes", eval_modes)
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
-                            #continue
+                            # continue
 
-                            max_epochs = 1 #TODO remove
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
@@ -530,19 +530,18 @@ def runAllTests():
                             print("starting run:", curr_file)
 
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
-                                #max_epochs = 1 #TODO REMOVE
                                 best_out, confs = benchmark(net, op, scheduler, train_loader=train_loader,
-                                                           valid_loader=valid_loader, test_loader=test_loader,
-                                                           max_epochs=max_epochs, device=device, perforation_mode=perf,
-                                                           run_name=run_name, batch_size=batch_size, loss_function=loss_fn,
-                                                           eval_modes=eval_modes, in_size=in_size,dataset=dataset,
-                                                           perforation_type=perf_type, file=f, summarise=False)
-                                #TODO:
-                                #TODO: check which nets do not converge, and reduce lr i guess
-                                #TODO check da je bar properly normaliziran, zelo dvomim da je max per-class acc 3% of 10%
+                                                            valid_loader=valid_loader, test_loader=test_loader,
+                                                            max_epochs=max_epochs, device=device, perforation_mode=perf,
+                                                            run_name=run_name, batch_size=batch_size,
+                                                            loss_function=loss_fn,
+                                                            eval_modes=eval_modes, in_size=in_size, dataset=dataset,
+                                                            perforation_type=perf_type, file=f, summarise=False)
+
                                 if not "agri" in dataset:
                                     n_samp = len((test_loader if test_loader is not None else valid_loader).dataset)
-                                    fig, ax = plt.subplots(len(confs), 1, figsize=(5, 15) if len(confs) != 1 else (6,5))
+                                    fig, ax = plt.subplots(len(confs), 1,
+                                                           figsize=(5, 15) if len(confs) != 1 else (6, 5))
                                     if len(confs) == 1:
                                         ax = [ax]
                                         mins, maxs = confs[0].min().item(), confs[0].max().item()
@@ -561,20 +560,23 @@ def runAllTests():
                                         ax[i].set_xticks([0], [""])
                                         if dataset != "ucihar":
                                             ax[i].set_yticks(list(range(10)),
-                                                         ["airplane", "automobile", "bird", "cat", "deer", "dog",
-                                                          "frog", "horse", "ship", "truck"])
+                                                             ["airplane", "automobile", "bird", "cat", "deer", "dog",
+                                                              "frog", "horse", "ship", "truck"])
                                         else:
                                             ax[i].set_yticks(list(range(6)),
-                                                             ["WALKING","WALKING_UPSTAIRS","WALKING_DOWNSTAIRS","SITTING","STANDING","LAYING"])
+                                                             ["WALKING", "UPSTAIRS", "DOWNSTAIRS", "SITTING",
+                                                              "STANDING", "LAYING"])
                                         ax[i].set_ylabel("Predicted")
                                         ax[i].set_xlabel("True")
                                     if dataset != "ucihar":
                                         ax[-1].set_xticks(list(range(10)),
-                                                      ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog",
-                                                       "horse", "ship", "truck"], rotation=90)
+                                                          ["airplane", "automobile", "bird", "cat", "deer", "dog",
+                                                           "frog",
+                                                           "horse", "ship", "truck"], rotation=90)
                                     else:
                                         ax[-1].set_yticks(list(range(6)),
-                                                         ["WALKING","WALKING_UPSTAIRS","WALKING_DOWNSTAIRS","SITTING","STANDING","LAYING"])
+                                                          ["WALKING", "UPSTAIRS", "DOWNSTAIRS",
+                                                           "SITTING", "STANDING", "LAYING"])
                                     # add space for colour bar
                                     if len(confs) == 1:
                                         fig.subplots_adjust(right=0.85, top=0.9, bottom=0.24)
@@ -592,8 +594,6 @@ def runAllTests():
                                     ...
                             with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                                 print(best_out, file=ff)
-
-
 
 
 if __name__ == "__main__":
