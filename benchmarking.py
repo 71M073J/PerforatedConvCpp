@@ -442,7 +442,7 @@ def runAllTests():
             else:
                 max_epochs = 200
                 batch_size = 32
-                lr = 0.1
+                lr = 0.01
 
 
             for model, modelname in version[0]:
@@ -501,8 +501,8 @@ def runAllTests():
                                         perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
                                                  pretrained=pretrained)
 
-                            if dataset == "cifar" and perf_type == "dau":
-                                lr /= 10
+                            #if (dataset == "cifar" and perf_type == "dau") or mo:
+                            #    lr /= 10
                             print("net:", modelname)
                             print("Dataset:", dataset)
                             print(max_epochs, "epochs")
@@ -516,8 +516,6 @@ def runAllTests():
                             #continue
 
                             max_epochs = 1 #TODO remove
-                            if dataset != "cinic":
-                                continue#TODO remove
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
