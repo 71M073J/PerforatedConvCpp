@@ -44,7 +44,7 @@ def replace_module_perfconv(net, from_class, perforation_mode, pretrained):
             if pretrained:
                 with torch.no_grad():
                     new.weight = torch.nn.Parameter(torch.clone(original.weight))
-                    if original.bias:
+                    if original.bias is not None or (type(original.bias) == bool and original.bias):
                         new.bias = torch.nn.Parameter(torch.clone(original.bias))
             setattr(net, name, new)
         elif len(list(submodule.named_children())) != 0:
