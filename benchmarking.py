@@ -266,12 +266,13 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     return losses, train_accs, results
 
 
-def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name):
+def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name, dataset):
     train_mode = None
     valid_losses = []
     valid_accs = []
     results = {}
-    conf = torch.zeros((10,10), device=device)
+    sz = 6 if dataset == "ucihar" else 10
+    conf = torch.zeros((sz,sz), device=device)
     # ep_valid_losses = []
     net.eval()
     if hasattr(net, "_get_perforation"):
@@ -317,7 +318,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
-              summarise=True, pretrained=True,
+              summarise=True, pretrained=True, dataset="idk",
               device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
     if type(perforation_mode) not in [tuple, list]:
         perforation_mode = (perforation_mode, perforation_mode)
@@ -374,7 +375,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             valid_losses, valid_accs, allMetrics, ims = validate(net=net, valid_loader=valid_loader, device=device,
                                                                     loss_fn=loss_function,
                                                                     file=file, batch_size=batch_size, eval_mode=mode,
-                                                                    run_name=run_name, reporting=reporting)
+                                                                    run_name=run_name, reporting=reporting, dataset=dataset)
             curr_loss = np.mean(valid_losses)
             if curr_loss < best_valid_losses[ind]:
                 best_valid_losses[ind] = curr_loss
@@ -401,7 +402,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
                                                                      loss_fn=loss_function,
                                                                      file=file, batch_size=batch_size, eval_mode=mode,
-                                                                     reporting=reporting, run_name=run_name)
+                                                                     reporting=reporting, run_name=run_name, dataset=dataset)
         metrics.append(allMetrics)
         confs.append(conf)
         h = f"Validation loss ({mode}):" + str(np.mean(test_losses))
@@ -534,7 +535,7 @@ def runAllTests():
                                                            valid_loader=valid_loader, test_loader=test_loader,
                                                            max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                            run_name=run_name, batch_size=batch_size, loss_function=loss_fn,
-                                                           eval_modes=eval_modes, in_size=in_size,
+                                                           eval_modes=eval_modes, in_size=in_size,dataset=dataset,
                                                            perforation_type=perf_type, file=f, summarise=False)
                                 #TODO:
                                 #TODO: check which nets do not converge, and reduce lr i guess
@@ -558,16 +559,22 @@ def runAllTests():
                                             ax[0].set_title("No perforation")
 
                                         ax[i].set_xticks([0], [""])
-                                        ax[i].set_yticks(list(range(10)),
+                                        if dataset != "ucihar":
+                                            ax[i].set_yticks(list(range(10)),
                                                          ["airplane", "automobile", "bird", "cat", "deer", "dog",
                                                           "frog", "horse", "ship", "truck"])
+                                        else:
+                                            ax[i].set_yticks(list(range(6)),
+                                                             ["WALKING","WALKING_UPSTAIRS","WALKING_DOWNSTAIRS","SITTING","STANDING","LAYING"])
                                         ax[i].set_ylabel("Predicted")
                                         ax[i].set_xlabel("True")
-
-                                    ax[-1].set_xticks(list(range(10)),
+                                    if dataset != "ucihar":
+                                        ax[-1].set_xticks(list(range(10)),
                                                       ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog",
                                                        "horse", "ship", "truck"], rotation=90)
-
+                                    else:
+                                        ax[-1].set_yticks(list(range(6)),
+                                                         ["WALKING","WALKING_UPSTAIRS","WALKING_DOWNSTAIRS","SITTING","STANDING","LAYING"])
                                     # add space for colour bar
                                     if len(confs) == 1:
                                         fig.subplots_adjust(right=0.85, top=0.9, bottom=0.24)
