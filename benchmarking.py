@@ -43,7 +43,10 @@ metrics = {
     "f1score": BinaryF1Score,
 }
 seed = 123
-g = torch.Generator(seed)
+g = torch.Generator(device="cpu")
+g.manual_seed(123)
+torch.manual_seed(123)
+np.random.seed(123)
 num_workers = 1
 
 
@@ -96,12 +99,12 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         train = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
                 root='./data', train=True, download=True, transform=tf), batch_size=batch_size, shuffle=True,
-            num_workers=num_workers)
+            num_workers=num_workers,generator=g,)
 
         valid = torch.utils.data.DataLoader(
             torchvision.datasets.CIFAR10(
                 root='./data', train=False, download=True, transform=tf), batch_size=batch_size, shuffle=False,
-            num_workers=num_workers)
+            num_workers=num_workers,generator=g,)
     elif "agri" in data:
         print(image_resolution)
         tf.append(transforms.RandomRotation(45))
@@ -121,9 +124,9 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
             smaller=image_resolution, transform=tf
         ).get_dataset()
         train, valid, test = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True,
-                                                         num_workers=num_workers), \
-            torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers), \
-            torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+                                                         num_workers=num_workers,generator=g,), \
+            torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=False, num_workers=num_workers,generator=g,), \
+            torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=num_workers,generator=g,)
     elif data == "ucihar" or ("uci" in data.lower() and "har" in data.lower()):
         # UCIHAR is already normalised - kinda
         # "but we can still do it"
@@ -135,9 +138,9 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         tf = transforms.Compose(tf)
 
         train = torch.utils.data.DataLoader(UciHAR("train", transform=tf), batch_size=batch_size, shuffle=True,
-                                            num_workers=num_workers)
+                                            num_workers=num_workers,generator=g,)
         valid = torch.utils.data.DataLoader(UciHAR("test", transform=tf), batch_size=batch_size, shuffle=False,
-                                            num_workers=num_workers)
+                                            num_workers=num_workers,generator=g,)
     else:
         raise ValueError("Not supported dataset")
 
@@ -512,10 +515,12 @@ def runAllTests():
                             print("run name:", curr_file)
                             #continue
 
+                            max_epochs = 1 #TODO remove
+                            if dataset != "cinic":
+                                continue#TODO remove
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
-                            max_epochs = 1 #TODO remove
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
 
                             run_name = f"{curr_file}"
