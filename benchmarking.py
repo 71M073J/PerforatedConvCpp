@@ -415,7 +415,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     h3 = "Training time:" + str(timeElapsed) + " seconds"
     print("Training time:", timeElapsed, " seconds")
     best_outputs.append(h3)
-    return best_outputs, confs
+    return best_outputs, confs, allMetrics
 
 
 def runAllTests():
@@ -530,7 +530,7 @@ def runAllTests():
                             print("starting run:", curr_file)
 
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
-                                best_out, confs = benchmark(net, op, scheduler, train_loader=train_loader,
+                                best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                             valid_loader=valid_loader, test_loader=test_loader,
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                             run_name=run_name, batch_size=batch_size,
@@ -591,7 +591,8 @@ def runAllTests():
                                         print(confs, eval_modes)
                                         print(n_samp)
                                 else:
-                                    ...
+                                    with open(f"./{prefix}/{curr_file}_confs.txt", "w") as fc:
+                                        print(metrics, file=fc)
                             with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                                 print(best_out, file=ff)
 
