@@ -291,7 +291,8 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                 valid_accs.append(acc.detach().cpu())
 
             else:
-                conf[softm.argmax(dim=1), classes] += 1
+                for s, c in zip(softm.argmax(dim=1), classes):
+                    conf[s, c] += 1
 
                 acc = (softm.argmax(dim=1) == classes)
                 valid_accs.append(torch.sum(acc).detach().cpu() / batch_size)
@@ -384,6 +385,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     best_outputs = []
     if eval_modes is None:
         eval_modes = (None,)
+    metrics = []
     for ind, mode in enumerate(eval_modes):
         net.eval()
         if best_models[ind] is not None:
@@ -397,6 +399,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
                                                                      loss_fn=loss_function,
                                                                      file=file, batch_size=batch_size, eval_mode=mode,
                                                                      reporting=reporting, run_name=run_name)
+        metrics.append(allMetrics)
         confs.append(conf)
         h = f"Validation loss ({mode}):" + str(np.mean(test_losses))
         print(h)
@@ -512,7 +515,7 @@ def runAllTests():
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
-
+                            max_epochs = 1 #TODO remove
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
 
                             run_name = f"{curr_file}"
@@ -530,19 +533,24 @@ def runAllTests():
                                                            run_name=run_name, batch_size=batch_size, loss_function=loss_fn,
                                                            eval_modes=eval_modes, in_size=in_size,
                                                            perforation_type=perf_type, file=f, summarise=False)
-
+                                #TODO:
+                                #TODO: check which nets do not converge, and reduce lr i guess
+                                #TODO check da je bar properly normaliziran, zelo dvomim da je max per-class acc 3% of 10%
                                 if not "agri" in dataset:
                                     n_samp = len((test_loader if test_loader is not None else valid_loader).dataset)
                                     fig, ax = plt.subplots(len(confs), 1, figsize=(5, 15) if len(confs) != 1 else (6,5))
                                     if len(confs) == 1:
                                         ax = [ax]
-                                    h = torch.cat(confs, dim=1) / n_samp
-                                    mins, maxs = h.min().item(), h.max().item()
+                                        mins, maxs = confs[0].min().item(), confs[0].max().item()
                                     # print(mins, maxs, n_samp, confs)
                                     for i, conf in enumerate(confs):
+                                        mins, maxs = conf.min().item() / n_samp, conf.max().item() / n_samp
                                         imlast = ax[i].imshow((conf / n_samp) * 100, vmin=mins * 100, vmax=maxs * 100)
                                         if perf_type is not None:
                                             ax[i].set_title(f"Perforation mode {eval_modes[i]}")
+                                            fig.subplots_adjust(right=0.93, top=0.9, bottom=0.2)
+                                            cbar_ax = fig.add_axes([0.85, 0.2 * (i + 1) + i * 0.05, 0.02, 0.2])
+                                            plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
                                         else:
                                             ax[0].set_title("No perforation")
 
@@ -550,24 +558,27 @@ def runAllTests():
                                         ax[i].set_yticks(list(range(10)),
                                                          ["airplane", "automobile", "bird", "cat", "deer", "dog",
                                                           "frog", "horse", "ship", "truck"])
+                                        ax[i].set_ylabel("Predicted")
+                                        ax[i].set_xlabel("True")
+
                                     ax[-1].set_xticks(list(range(10)),
                                                       ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog",
                                                        "horse", "ship", "truck"], rotation=90)
 
                                     # add space for colour bar
                                     if len(confs) == 1:
-                                        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
-                                        cbar_ax = fig.add_axes([0.85, 0.2, 0.04, 0.7])
+                                        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.24)
+                                        cbar_ax = fig.add_axes([0.80, 0.20, 0.04, 0.7])
+                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
 
-                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
-                                    else:
-                                        fig.subplots_adjust(right=0.85, top=0.9, bottom=0.2)
-                                        cbar_ax = fig.add_axes([0.82, 0.4, 0.02, 0.3])
-                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
                                     plt.savefig(f"./{prefix}/imgs/{curr_file}.png")
                                     plt.clf()
+
+                                    with open(f"./{prefix}/{curr_file}_confs.txt", "w") as fc:
+                                        print(confs, eval_modes, file=fc)
+                                        print(confs, eval_modes)
+                                        print(n_samp)
                                 else:
-                                    #TODO print IoUs
                                     ...
                             with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                                 print(best_out, file=ff)
