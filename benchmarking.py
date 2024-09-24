@@ -480,20 +480,22 @@ def runAllTests():
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
-                                print("file for", curr_file, "already exists, skipping...")
                                 with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
                                     try:
                                         l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
-                                        if l > 0.15:
-                                            continue
-                                        else:
+
+                                        if "resnet" not in modelname and l < 0.15 and "unet" not in modelname:
+                                            #not learning, not resnet
                                             print(f"RE-running run {curr_file}")
+                                        else:
+                                            print("file for", curr_file, "already exists, skipping...")
+                                            continue
                                     except:pass
                             if "agri" in dataset:
                                 net = model(2).to(device)
                             else:
                                 net = model(num_classes=10).to(device)
-                            pretrained = True
+                            pretrained = True #keep default network init
                             if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
                                 if type(perf[0]) != str:  # is perf mode not a string
                                     if "dau" in perf_type.lower():
