@@ -117,7 +117,7 @@ class PerforatedConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, original_conv_back=False):
+                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=False):
         self.original_conv_back = original_conv_back
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
@@ -202,8 +202,8 @@ class PerforatedConv2d(nn.Module):
         else:
             self.bias = nn.Parameter(torch.clone(bias))
             self.is_bias = True
-
-        self._initialize_weights()
+        if init_weights:
+            self._initialize_weights()
 
         self.out_x = 0
         self.out_y = 0
