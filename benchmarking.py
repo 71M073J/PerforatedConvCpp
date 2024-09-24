@@ -481,7 +481,14 @@ def runAllTests():
                             curr_file = f"{name}"
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
                                 print("file for", curr_file, "already exists, skipping...")
-                                continue
+                                with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
+                                    try:
+                                        l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
+                                        if l > 0.15:
+                                            continue
+                                        else:
+                                            print(f"RE-running run {curr_file}")
+                                    except:pass
                             if "agri" in dataset:
                                 net = model(2).to(device)
                             else:
@@ -516,7 +523,8 @@ def runAllTests():
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
                             # continue
-
+                            net._reset()
+                            net.to(device)
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
