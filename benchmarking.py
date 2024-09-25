@@ -272,7 +272,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     valid_losses = []
     valid_accs = []
     results = {}
-    sz = 10 if dataset == "ucihar" else 10
+    sz = 6 if dataset == "ucihar" else 10
     conf = torch.zeros((sz, sz), device=device)
     # ep_valid_losses = []
     net.eval()
@@ -281,6 +281,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     with torch.no_grad():
         if eval_mode is not None:
             net._set_perforation(eval_mode)
+
             # net._reset()
             # print(net._get_perforation())
         for i, (batch, classes) in enumerate(valid_loader):
@@ -392,13 +393,13 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         eval_modes = (None,)
     metrics = []
     for ind, mode in enumerate(eval_modes):
-        net.eval()
+        #net.eval()
         if best_models[ind] is not None:
             net.load_state_dict(best_models[ind])
-        if mode is not None:
-            net._set_perforation(mode)
-            # net._reset()
-        net.eval()
+        #if mode is not None:
+        #    net._set_perforation(mode)
+        #    # net._reset()
+        #net.eval()
         print("\nValidating eval mode", mode)
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
                                                             loss_fn=loss_function,
@@ -427,7 +428,7 @@ def runAllTests():
         [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]]
     ]
 
-    eval_modes = [None, (2, 2), (3, 3)]
+    eval_modes = [None, (1, 1), (2, 2), (3, 3)]
 
     for version in architectures:  # classigication, segmetnationg
         for dataset in version[1]:
@@ -494,7 +495,8 @@ def runAllTests():
                             if "agri" in dataset:
                                 net = model(2).to(device)
                             else:
-                                net = model(num_classes=10).to(device)
+                                sz = 6 if dataset == "ucihar" else 10
+                                net = model(num_classes=sz).to(device)
                             pretrained = True #keep default network init
                             if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
                                 if type(perf[0]) != str:  # is perf mode not a string
@@ -511,7 +513,8 @@ def runAllTests():
                                     elif "perf" in perf_type.lower():
                                         perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
                                                  pretrained=pretrained)
-
+                            else:
+                                perfPerf(net, in_size=in_size, perforation_mode=(1,1), pretrained=pretrained)
                             # if (dataset == "cifar" and perf_type == "dau") or mo:
                             #    lr /= 10
                             print("net:", modelname)
@@ -525,9 +528,9 @@ def runAllTests():
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
                             # continue
-                            if hasattr(net, "_reset"):
-                                net._reset()
+                            net._reset()
                             net.to(device)
+
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
@@ -552,7 +555,7 @@ def runAllTests():
                                 if not "agri" in dataset:
                                     n_samp = len((test_loader if test_loader is not None else valid_loader).dataset)
                                     fig, ax = plt.subplots(len(confs), 1,
-                                                           figsize=(5, 15) if len(confs) != 1 else (6, 5))
+                                                           figsize=(5, 20) if len(confs) != 1 else (6, 5))
                                     if len(confs) == 1:
                                         ax = [ax]
                                         mins, maxs = confs[0].min().item(), confs[0].max().item()
@@ -560,15 +563,13 @@ def runAllTests():
                                     for i, conf in enumerate(confs):
                                         mins, maxs = conf.min().item() / n_samp, conf.max().item() / n_samp
                                         imlast = ax[i].imshow((conf / n_samp) * 100, vmin=mins * 100, vmax=maxs * 100)
-                                        if perf_type is not None:
-                                            ax[i].set_title(f"Perforation mode {eval_modes[i]}")
-                                            fig.subplots_adjust(right=0.93, top=0.9, bottom=0.2)
-                                            cbar_ax = fig.add_axes([0.85, 0.2 * (i + 1) + i * 0.05, 0.02, 0.2])
-                                            plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
-                                        else:
-                                            ax[0].set_title("No perforation")
 
-                                        ax[i].set_xticks([0], [""])
+                                        ax[i].set_title(f"Perforation mode {eval_modes[i]}")
+                                        fig.subplots_adjust(right=0.94, top=0.93 - (3 - i) * 0.05, bottom=0.2)
+                                        cbar_ax = fig.add_axes([0.86, 0.2 * (i + 1) + i * -0.01, 0.02, 0.16])
+                                        plt.colorbar(imlast, cax=cbar_ax, ticks=[mins * 100, maxs * 100])
+                                        #ax[0].set_title("No perforation")
+
                                         if dataset != "ucihar":
                                             ax[i].set_yticks(list(range(10)),
                                                              ["airplane", "automobile", "bird", "cat", "deer", "dog",
@@ -576,7 +577,7 @@ def runAllTests():
                                         else:
                                             ax[i].set_yticks(list(range(10)),
                                                              ["WALKING", "UPSTAIRS", "DOWNSTAIRS", "SITTING",
-                                                              "STANDING", "LAYING", "", "", "", ""])
+                                                              "STANDING", "LAYING"])
                                         ax[i].set_ylabel("Predicted")
                                         ax[i].set_xlabel("True")
                                     if dataset != "ucihar":
@@ -587,7 +588,7 @@ def runAllTests():
                                     else:
                                         ax[-1].set_yticks(list(range(10)),
                                                           ["WALKING", "UPSTAIRS", "DOWNSTAIRS",
-                                                           "SITTING", "STANDING", "LAYING", "", "", "",""])
+                                                           "SITTING", "STANDING", "LAYING"])
                                     # add space for colour bar
                                     if len(confs) == 1:
                                         fig.subplots_adjust(right=0.85, top=0.9, bottom=0.24)
