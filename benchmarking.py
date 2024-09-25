@@ -514,6 +514,7 @@ def runAllTests():
                                         perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
                                                  pretrained=pretrained)
                             else:
+                                print("Perforating base net for noperf training...")
                                 perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
                                 net._set_perforation((1,1))
                             # if (dataset == "cifar" and perf_type == "dau") or mo:
@@ -531,6 +532,13 @@ def runAllTests():
                             # continue
                             net._reset()
                             net.to(device)
+
+                            ##TODO REMOVE
+                            #net = mobilenet_v2(num_classes=6).to(device)
+                            #dataset = "ucihar"
+                            #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
+                            #                     pretrained=pretrained)
+
 
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,

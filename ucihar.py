@@ -32,6 +32,8 @@ class UciHAR(Dataset):
         self.images = torch.cat((ts[:, :, :, :32], ts[:, :, :, 32:64], ts[:, :, :, 64:3*32], ts[:, :, :, 3*32:]), dim=2)
         with open(f"./data/UCI HAR Dataset/{mode}/y_{mode}.txt") as f:
             self.classes = torch.stack(list(map(lambda p: tensorise(p, 1), f.readlines()))).long().squeeze()
+            if torch.min(self.classes) == 1 and torch.max(self.classes) == 6:
+                self.classes = self.classes - 1
         self.transform = transform
         #    self.classes = torch.nn.functional.one_hot(torch.stack(list(map(lambda p: tensorise(p, 1), f.readlines()))).long().squeeze(), num_classes=10)
         #    print(self.classes.shape)
