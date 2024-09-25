@@ -525,7 +525,8 @@ def runAllTests():
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
                             # continue
-                            net._reset()
+                            if hasattr(net, "_reset"):
+                                net._reset()
                             net.to(device)
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
