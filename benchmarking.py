@@ -548,14 +548,15 @@ def runAllTests():
                             if not os.path.exists(f"./{prefix}/imgs"):
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
-
+                            if perforation == 2:
+                                eval_modes[-1] = (4,4)
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                                 best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                             valid_loader=valid_loader, test_loader=test_loader,
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                             run_name=run_name, batch_size=batch_size,
                                                             loss_function=loss_fn,
-                                                            eval_modes=eval_modes if perforation != 2 else eval_modes + [(4,4)], in_size=in_size, dataset=dataset,
+                                                            eval_modes=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
 
                                 if not "agri" in dataset:
