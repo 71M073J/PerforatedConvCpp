@@ -272,7 +272,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     valid_losses = []
     valid_accs = []
     results = {}
-    sz = 7 if dataset == "ucihar" else 10
+    sz = 10 if dataset == "ucihar" else 10
     conf = torch.zeros((sz, sz), device=device)
     # ep_valid_losses = []
     net.eval()
