@@ -574,9 +574,9 @@ def runAllTests():
                                                              ["airplane", "automobile", "bird", "cat", "deer", "dog",
                                                               "frog", "horse", "ship", "truck"])
                                         else:
-                                            ax[i].set_yticks(list(range(6)),
+                                            ax[i].set_yticks(list(range(10)),
                                                              ["WALKING", "UPSTAIRS", "DOWNSTAIRS", "SITTING",
-                                                              "STANDING", "LAYING"])
+                                                              "STANDING", "LAYING", "", "", "", ""])
                                         ax[i].set_ylabel("Predicted")
                                         ax[i].set_xlabel("True")
                                     if dataset != "ucihar":
@@ -585,9 +585,9 @@ def runAllTests():
                                                            "frog",
                                                            "horse", "ship", "truck"], rotation=90)
                                     else:
-                                        ax[-1].set_yticks(list(range(6)),
+                                        ax[-1].set_yticks(list(range(10)),
                                                           ["WALKING", "UPSTAIRS", "DOWNSTAIRS",
-                                                           "SITTING", "STANDING", "LAYING"])
+                                                           "SITTING", "STANDING", "LAYING", "", "", "",""])
                                     # add space for colour bar
                                     if len(confs) == 1:
                                         fig.subplots_adjust(right=0.85, top=0.9, bottom=0.24)
