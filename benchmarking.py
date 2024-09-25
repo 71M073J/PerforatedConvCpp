@@ -232,6 +232,8 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     # entropies = 0
     weights = []
 
+    torch.cuda.synchronize()
+    t0 = time.time()
     for i, (batch, classes) in enumerate(data_loader):
         if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
             perfs = get_perfs(perforation_mode[0], n_conv)
@@ -262,9 +264,13 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         #    probs=torch.maximum(F.softmax(pred.detach().cpu(), dim=1), torch.tensor(1e-12)))  # F.softmax(pred.detach().cpu(), dim=1)
         # entropies += entropy.entropy().mean()
         # acc = (F.softmax(pred.detach().cpu(), dim=1).argmax(dim=1) == classes)
+
+    torch.cuda.synchronize()
+    t1 = time.time()
+    timet = (t1 - t0)
     for metric in results:
         results[metric] = torch.mean(torch.tensor(results[metric]))
-    return losses, train_accs, results
+    return losses, train_accs, results, timet
 
 
 def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name, dataset):
@@ -328,14 +334,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         vary_perf = True
     else:
         vary_perf = None
-    if perforation_mode[0] is None:
-        eval_modes = (None,)
+
     if eval_modes is None:
         eval_modes = (None,)
     n_conv = 0
 
-    # n_conv = len(net._get_n_calc())
-    # net._set_perforation(get_perfs(perforation_mode, n_conv))
     # net._reset()
     print(f"starting run {run_name}...")
     timeElapsed = 0
@@ -349,16 +352,12 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             if file is not None:
                 print(f"\nEpoch {epoch} training:", file=file)
             print(f"\nEpoch {epoch} training:")
-        torch.cuda.synchronize()
-        t0 = time.time()
-        losses, train_accs, results = train(net, op, train_loader, device, loss_fn=loss_function,
+        losses, train_accs, results, timet = train(net, op, train_loader, device, loss_fn=loss_function,
                                             perforation_mode=perforation_mode,
                                             batch_size=batch_size, perforation_type=perforation_type, run_name=run_name,
                                             grad_clip=grad_clip, vary_perf=vary_perf, n_conv=n_conv)
-        torch.cuda.synchronize()
-        t1 = time.time()
-        timedelta = int((t1 - t0) * 1000) / 1000
-        timeElapsed += (t1 - t0)
+        timedelta = int(timet* 1000) / 1000
+        timeElapsed += timet
         if reporting:
             if file is not None:
                 print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item(), file=file)
@@ -396,9 +395,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         #net.eval()
         if best_models[ind] is not None:
             net.load_state_dict(best_models[ind])
-        #if mode is not None:
-        #    net._set_perforation(mode)
-        #    # net._reset()
+
         #net.eval()
         print("\nValidating eval mode", mode)
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
@@ -533,7 +530,7 @@ def runAllTests():
                             net._reset()
                             net.to(device)
 
-                            ##TODO REMOVE
+                            ##TODO get noperf trained network perforated eval results
                             #net = mobilenet_v2(num_classes=6).to(device)
                             #dataset = "ucihar"
                             #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
