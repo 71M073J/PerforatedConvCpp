@@ -514,7 +514,8 @@ def runAllTests():
                                         perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
                                                  pretrained=pretrained)
                             else:
-                                perfPerf(net, in_size=in_size, perforation_mode=(1,1), pretrained=pretrained)
+                                perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
+                                net._set_perforation((1,1))
                             # if (dataset == "cifar" and perf_type == "dau") or mo:
                             #    lr /= 10
                             print("net:", modelname)
