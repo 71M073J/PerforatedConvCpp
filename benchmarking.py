@@ -484,7 +484,7 @@ def runAllTests():
                                     try:
                                         l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
 
-                                        if "resnet" not in modelname and l < 0.15 and "unet" not in modelname:
+                                        if "resnet" not in modelname and l < 0.15 and "unet" not in modelname and perf_type != "dau":
                                             #not learning, not resnet
                                             print(f"RE-running run {curr_file}")
                                         else:
