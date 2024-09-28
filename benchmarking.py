@@ -548,8 +548,10 @@ def runAllTests():
                             if not os.path.exists(f"./{prefix}/imgs"):
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
-                            if perforation == 2:
+                            if perforation == 2 or perforation == 3:
                                 eval_modes[-1] = (4,4)
+                            else:
+                                eval_modes[-1] = (3,3)
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                                 best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                             valid_loader=valid_loader, test_loader=test_loader,
