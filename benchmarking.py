@@ -326,7 +326,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
-              summarise=True, pretrained=True, dataset="idk",
+              summarise=True, pretrained=True, dataset="idk", prefix="",
               device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
     if type(perforation_mode) not in [tuple, list]:
         perforation_mode = (perforation_mode, perforation_mode)
@@ -395,7 +395,10 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         #net.eval()
         if best_models[ind] is not None:
             net.load_state_dict(best_models[ind])
-
+        if not os.path.exists(f"./{prefix}/models"):
+            os.makedirs(f"./{prefix}/models")
+        #Save models for evaluation purposes
+        torch.save(best_models[ind], f"./{prefix}/models/{run_name}.model")
         #net.eval()
         print("\nValidating eval mode", mode)
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
@@ -530,7 +533,8 @@ def runAllTests():
                             net._reset()
                             net.to(device)
 
-                            ##TODO get noperf trained network perforated eval results
+                            #TODO make function to eval SPEED, MEMORY, FLOPS of each network, that is called if
+                            # "_best" file already exists so we can do stuff on already trained tests
                             #net = mobilenet_v2(num_classes=6).to(device)
                             #dataset = "ucihar"
                             #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
@@ -557,7 +561,7 @@ def runAllTests():
                                                             valid_loader=valid_loader, test_loader=test_loader,
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                             run_name=run_name, batch_size=batch_size,
-                                                            loss_function=loss_fn,
+                                                            loss_function=loss_fn,prefix=prefix,
                                                             eval_modes=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
 
