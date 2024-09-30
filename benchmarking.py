@@ -535,6 +535,9 @@ def runAllTests():
 
                             #TODO make function to eval SPEED, MEMORY, FLOPS of each network, that is called if
                             # "_best" file already exists so we can do stuff on already trained tests
+
+                            #TODO: separate scripts for making images and scripts for training - why tf is one dependent on the other
+                            #TODO: aaaaaaaaa
                             #net = mobilenet_v2(num_classes=6).to(device)
                             #dataset = "ucihar"
                             #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
@@ -588,7 +591,7 @@ def runAllTests():
                                                              ["airplane", "automobile", "bird", "cat", "deer", "dog",
                                                               "frog", "horse", "ship", "truck"])
                                         else:
-                                            ax[i].set_yticks(list(range(10)),
+                                            ax[i].set_yticks(list(range(6)),
                                                              ["WALKING", "UPSTAIRS", "DOWNSTAIRS", "SITTING",
                                                               "STANDING", "LAYING"])
                                         ax[i].set_ylabel("Predicted")
@@ -599,7 +602,7 @@ def runAllTests():
                                                            "frog",
                                                            "horse", "ship", "truck"], rotation=90)
                                     else:
-                                        ax[-1].set_yticks(list(range(10)),
+                                        ax[-1].set_yticks(list(range(6)),
                                                           ["WALKING", "UPSTAIRS", "DOWNSTAIRS",
                                                            "SITTING", "STANDING", "LAYING"])
                                     # add space for colour bar
