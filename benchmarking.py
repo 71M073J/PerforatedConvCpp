@@ -391,6 +391,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     if eval_modes is None:
         eval_modes = (None,)
     metrics = []
+    allMetrics = {}
     for ind, mode in enumerate(eval_modes):
         #net.eval()
         if best_models[ind] is not None:

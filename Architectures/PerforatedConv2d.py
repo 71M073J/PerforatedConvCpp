@@ -303,11 +303,13 @@ class DownActivUp(nn.Module):
     def __repr__(self):
         return f"DownActivUp({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride}, activ={self.activ.__repr__()})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
-                 dilation=1, groups=1, bias=True, device=None, padding_mode=None, activation=torch.nn.ReLU(),
+                 dilation=1, groups=1, bias=True, device=None, padding_mode=None, activation=torch.nn.Identity(),
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=False):
+                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=False, up=True, down=True):
         self.original_conv_back = original_conv_back
         super(DownActivUp, self).__init__()
+        self.up = up
+        self.down = down
         self.verbose = verbose
         if strided_backward is None:
             if grad_conv is None:
@@ -478,14 +480,20 @@ class DownActivUp(nn.Module):
             #        if self.n1 == 0:
             #            self.n2 = (self.n2 + 1) % self.mod2  # legit offseti
             #    print("trying to jitter")
-            x = Down.apply(input, self.weight, self.bias, (self.stride, self.padding, self.is_bias, self.perf_stride
+            if self.down:
+                x = Down.apply(input, self.weight, self.bias, (self.stride, self.padding, self.is_bias, self.perf_stride
                                        , self.device, self.dilation, self.groups, self.upscale_conv,
                                        self.strided_backward,
                                        self.verbose, self.original_conv_back, self.kernel_size[0], self.kernel_size[1]))
+            else:
+                x = torch.rand((input.shape[0], self.out_channels, (input.shape[2] - 2*(self.kernel_size[0]//2))//2, (input.shape[3] - 2*(self.kernel_size[0]//2))//2))
             x = self.activ(x)
-            return Up.apply(x, (self.stride, self.padding, self.is_bias, self.perf_stride, self.device, self.dilation,
+            if self.up:
+                return Up.apply(x, (self.stride, self.padding, self.is_bias, self.perf_stride, self.device, self.dilation,
                                 self.groups, self.upscale_conv, self.strided_backward, self.verbose, self.kernel_size,
                                 self.out_x, self.out_y))
+            else:
+                return x
             #return ConvFunction.apply(input, self.weight, self.bias,
             #                          (self.stride, self.padding, self.is_bias, self.perf_stride
             #                           , self.device, self.dilation, self.groups, self.upscale_conv,
