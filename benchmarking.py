@@ -224,7 +224,7 @@ def get_perfs(perforation_mode, n_conv):
 
 
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
-          perforation_mode, n_conv=0):
+          perforation_mode, n_conv):
     net.train()
     results = {}
     train_accs = []
@@ -337,7 +337,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 
     if eval_modes is None:
         eval_modes = (None,)
-    n_conv = 0
+    n_conv = len(net._get_n_calc())
 
     # net._reset()
     print(f"starting run {run_name}...")
@@ -486,9 +486,12 @@ def runAllTests():
                                     try:
                                         l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
 
-                                        if "resnet" not in modelname and l < 0.15 and "unet" not in modelname and perf_type != "dau":
+                                        if "resnet" not in modelname and l < 0.15 and \
+                                            "unet" not in modelname and perf_type != "dau":
                                             #not learning, not resnet
                                             print(f"RE-running run {curr_file}")
+                                        elif type(perforation) == str:#TODO REMOVE
+                                            print("RERUNNING THE RANDOMPERF STUFF, TODO REMOVE")
                                         else:
                                             print("file for", curr_file, "already exists, skipping...")
                                             continue

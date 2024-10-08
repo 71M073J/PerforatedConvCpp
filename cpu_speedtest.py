@@ -35,7 +35,7 @@ from agriadapt.dl_scripts.UNet import UNet
 from torch import argmax, where, cat, stack
 import agriadapt.segmentation.settings as settings
 import agriadapt.segmentation.data.data as dd
-from benchmarking import benchmark, get_datasets
+from benchmarking import benchmark, get_datasets, get_perfs, calculate_segmentation_metrics
 
 
 metrics = {
@@ -61,6 +61,51 @@ architectures = [
 ]
 
 eval_modes = []
+
+def profile_net(net, data_loader, vary_perf, n_conv, perforation_mode, run_name, prefix):
+
+    n_conv = len(net._get_n_calc())
+    for device in ["cuda:0", "cpu"]:
+        net.train()
+        results = {}
+        train_accs = []
+        losses = []
+        with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ]
+        ) as p:
+            for i, (batch, classes) in enumerate(data_loader):
+                if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
+                    perfs = get_perfs(perforation_mode[0], n_conv)
+                    net._set_perforation(perfs)
+                    # net._reset()
+
+                batch = batch.to(device)
+                classes = classes.to(device)
+                pred = net(batch)
+                loss = loss_fn(pred, classes)
+                loss.backward()
+                losses.append(loss.item())
+
+                op.step()
+                op.zero_grad()
+                if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
+                    # print("Should be here")
+                    acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
+                    train_accs.append(torch.sum(acc) / batch_size)
+                else:
+                    calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
+                    acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
+                    train_accs.append(acc)
+                break
+        pref = prefix + f"profile_{device}"
+        with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
+            print(best_out, file=ff)
+            print(p.key_averages().table(
+                sort_by="self_cuda_time_total", row_limit=-1), file=ff)
+
 
 for version in architectures:  # classigication, segmetnationg
     for dataset in version[1]:
@@ -127,6 +172,8 @@ for version in architectures:  # classigication, segmetnationg
                                         continue
                                 except:
                                     pass
+
+                            profile_net(net, data_loader=train_loader, n_conv=n_conv, )
                         if "agri" in dataset:
                             net = model(2).to(device)
                         else:
@@ -199,3 +246,4 @@ for version in architectures:  # classigication, segmetnationg
 
                         with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
                             print(best_out, file=ff)
+
