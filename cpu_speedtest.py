@@ -62,11 +62,11 @@ architectures = [
 
 eval_modes = []
 
-def profile_net(net, data_loader, vary_perf, n_conv, perforation_mode, run_name, prefix):
+def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_name, prefix, loss_fn):
 
-    n_conv = len(net._get_n_calc())
-    for device in ["cuda:0", "cpu"]:
+    for device in ["cuda", "cpu"]:
         net.train()
+        net.to(device)
         results = {}
         train_accs = []
         losses = []
@@ -100,11 +100,12 @@ def profile_net(net, data_loader, vary_perf, n_conv, perforation_mode, run_name,
                     acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
                     train_accs.append(acc)
                 break
-        pref = prefix + f"profile_{device}"
-        with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
-            print(best_out, file=ff)
+
+        with open(f"./{prefix}/{curr_file}_{device}.txt", "w") as ff:
             print(p.key_averages().table(
                 sort_by="self_cuda_time_total", row_limit=-1), file=ff)
+            print(p.key_averages().table(
+                sort_by="self_cuda_time_total", row_limit=-1))
 
 
 for version in architectures:  # classigication, segmetnationg
@@ -159,6 +160,47 @@ for version in architectures:  # classigication, segmetnationg
                         prefix = "allTests/cpu"
                         name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                         curr_file = f"{name}"
+                        if not os.path.exists(f"./allTests/profiling/{curr_file}_cuda.txt"):
+                            print("RUNNING PROFILING...")
+                            vary_perf = None
+                            if type(perforation) == str:
+                                vary_perf = True
+                            else:
+                                vary_perf = None
+                            if "agri" in dataset:
+                                net = model(2).to(device)
+                            else:
+                                sz = 6 if dataset == "ucihar" else 10
+                                net = model(num_classes=sz).to(device)
+                            pretrained = True  # keep default network init
+                            if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
+                                if type(perf[0]) != str:  # is perf mode not a string
+                                    if "dau" in perf_type.lower():
+                                        perfDAU(net, in_size=in_size, perforation_mode=perf,
+                                                pretrained=pretrained)
+                                    elif "perf" in perf_type.lower():
+                                        perfPerf(net, in_size=in_size, perforation_mode=perf,
+                                                 pretrained=pretrained)
+                                else:  # it is a string
+                                    if "dau" in perf_type.lower():
+                                        perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
+                                                pretrained=pretrained)
+                                    elif "perf" in perf_type.lower():
+                                        perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
+                                                 pretrained=pretrained)
+                            else:
+                                print("Perforating base net for noperf training...")
+                                perfPerf(net, in_size=in_size, perforation_mode=(2, 2), pretrained=pretrained)
+                                net._set_perforation((1, 1))
+                            pref = "allTests/profiling"
+                            n_conv = len(net._get_n_calc())
+                            if not os.path.exists(pref):
+                                os.makedirs(f"./{pref}")
+                            op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
+                            train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
+                                                                                   image_resolution=img_res)
+                            profile_net(net, op=op, data_loader=train_loader, n_conv=n_conv, vary_perf=vary_perf,
+                                        perforation_mode=perf, run_name=curr_file, prefix=pref, loss_fn=loss_fn)
                         if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
                             with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
                                 try:
@@ -167,13 +209,14 @@ for version in architectures:  # classigication, segmetnationg
                                     if "resnet" not in modelname and l < 0.15 and "unet" not in modelname and perf_type != "dau":
                                         # not learning, not resnet
                                         print(f"RE-running run {curr_file}")
+
                                     else:
                                         print("file for", curr_file, "already exists, skipping...")
                                         continue
                                 except:
                                     pass
 
-                            profile_net(net, data_loader=train_loader, n_conv=n_conv, )
+
                         if "agri" in dataset:
                             net = model(2).to(device)
                         else:
