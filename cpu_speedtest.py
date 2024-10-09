@@ -202,6 +202,7 @@ for version in architectures:  # classigication, segmetnationg
                             profile_net(net, op=op, data_loader=train_loader, n_conv=n_conv, vary_perf=vary_perf,
                                         perforation_mode=perf, run_name=curr_file, prefix=pref, loss_fn=loss_fn)
                         if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                            print("file exists...")
                             with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
                                 try:
                                     l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
@@ -214,8 +215,11 @@ for version in architectures:  # classigication, segmetnationg
                                         print("file for", curr_file, "already exists, skipping...")
                                         continue
                                 except:
+                                    print("opening file failed????")
                                     pass
-
+                        print(prefix)
+                        print(curr_file)
+                        print("Training due to missing out files...")
 
                         if "agri" in dataset:
                             net = model(2).to(device)
