@@ -64,12 +64,13 @@ eval_modes = []
 
 def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_name, prefix, loss_fn):
 
-    for device in ["cuda", "cpu"]:
+    for dev in ["cuda", "cpu"]:
         net.train()
-        net.to(device)
+        net.to(dev)
         results = {}
         train_accs = []
         losses = []
+
         with torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
@@ -82,8 +83,8 @@ def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_n
                     net._set_perforation(perfs)
                     # net._reset()
 
-                batch = batch.to(device)
-                classes = classes.to(device)
+                batch = batch.to(dev)
+                classes = classes.to(dev)
                 pred = net(batch)
                 if pred.device != classes.device:
                     loss = loss_fn(pred.cpu(), classes.cpu())
@@ -99,12 +100,12 @@ def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_n
                     acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
                     train_accs.append(torch.sum(acc) / batch_size)
                 else:
-                    calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
+                    calculate_segmentation_metrics(classes, pred, run_name, metrics, dev, results)
                     acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
                     train_accs.append(acc)
                 break
 
-        with open(f"./{prefix}/{curr_file}_{device}.txt", "w") as ff:
+        with open(f"./{prefix}/{curr_file}_{dev}.txt", "w") as ff:
             print(p.key_averages().table(
                 sort_by="self_cuda_time_total", row_limit=-1), file=ff)
             print(p.key_averages().table(
