@@ -74,7 +74,7 @@ def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_n
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
-                ]
+                ], profile_memory=True,
         ) as p:
             for i, (batch, classes) in enumerate(data_loader):
                 if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
