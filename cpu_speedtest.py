@@ -85,7 +85,10 @@ def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_n
                 batch = batch.to(device)
                 classes = classes.to(device)
                 pred = net(batch)
-                loss = loss_fn(pred, classes)
+                if pred.device != classes.device:
+                    loss = loss_fn(pred.cpu(), classes.cpu())
+                else:
+                    loss = loss_fn(pred, classes)
                 loss.backward()
                 losses.append(loss.item())
 
