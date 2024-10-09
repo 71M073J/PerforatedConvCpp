@@ -216,6 +216,7 @@ for version in architectures:  # classigication, segmetnationg
                                         continue
                                 except:
                                     print("opening file failed????")
+                                    continue
                                     pass
                         print(prefix)
                         print(curr_file)
