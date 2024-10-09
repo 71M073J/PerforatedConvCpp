@@ -70,7 +70,7 @@ def profile_net(net, op, data_loader, vary_perf, n_conv, perforation_mode, run_n
         results = {}
         train_accs = []
         losses = []
-
+        loss_fn = loss_fn.to(dev)
         with torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
