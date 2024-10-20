@@ -51,7 +51,7 @@ def replace_module_perfconv(net, from_class, perforation_mode, pretrained):
             replace_module_perfconv(submodule, from_class, perforation_mode=perforation_mode, pretrained=pretrained)
 
 
-def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_class=torch.nn.Conv2d, layers=None,
+def replace_module_downActivUp_backup(net, perforation_mode, pretrained=False, from_class=torch.nn.Conv2d, layers=None,
                                start_n=0, replace_activs=False, verbose=False):
     # raise NotImplementedError("i don't know how to dynamically adjust to operation order with different actiovations/batchnorms etc")
     # print("this deletes ALL activations...how to implement=?")
@@ -97,20 +97,29 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                     if verbose:
                         print("Layer", str(layers[start_n[0] + cnt][1]), "not shape preserving, apparently")
                     break
-            original = getattr(net, name)
+            if type(net) != torch.nn.Sequential:
+                original = getattr(net, name)
+            else:
+                original = net[int(name)]
             if verbose:
                 print("Final List of mid-layers:", newActivs)
             if not skipWhile:
+                if verbose:
+                    print("Creating new DAU layer")
+                print("\n\n", newActivs, "\n\n")
                 new = DownActivUp(original.in_channels, original.out_channels, original.kernel_size,
                                   original.stride, original.padding, original.dilation, original.groups,
                                   original.bias, original.weight.device, perforation_mode=perforation_mode,
                                   activation=torch.nn.Sequential(*newActivs))
+                print(new.activ)
+                print("\n\n")
             else:
+                ...#output layer should? be non-perforated maybe
                 new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
                                        original.stride, original.padding, original.dilation, original.groups,
                                        original.bias, original.weight.device, perforation_mode=perforation_mode)
             if verbose:
-                print("New layer:", new)
+                print("New layer:", new, "for name", name, "on layer", net._get_name())
             if pretrained:
                 print(pretrained, submodule, name)
                 with torch.no_grad():
@@ -120,7 +129,10 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                             new.bias = torch.nn.Parameter(torch.clone(original.bias))
                     elif hasattr(original.bias, "shape"):
                         new.bias = torch.nn.Parameter(torch.clone(original.bias))
-            setattr(net, name, new)
+            if type(net) != torch.nn.Sequential:
+                setattr(net, name, new)
+            else:
+                net[int(name)] = new
             start_n[0] += 1
         elif len(list(submodule.children())) == 0 and any(
                 map(str(submodule).__contains__, ["Dropout", "Norm", "ReLU", "ELU",
@@ -131,17 +143,125 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
             if replace_activs:
                 if verbose:
                     print("Setting layer", submodule, "to Identity()...")
-                setattr(net, name, torch.nn.Identity())
+                #setattr(net, name, torch.nn.Identity())
+                #TODO
             else:
                 replace_activs = False
-        elif len(list(submodule.named_children())) != 0:
+        elif len(list(submodule.children())) != 0:
             if verbose:
                 print("Recursing deeper...")
             replace_module_downActivUp(submodule, perforation_mode, pretrained, from_class=from_class, layers=layers,
-                                       start_n=start_n, replace_activs=replace_activs)
+                                       start_n=start_n, replace_activs=replace_activs, verbose=verbose)
         else:
+            #None of the valid replacement layers
             start_n[0] += 1
 
+def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_class=torch.nn.Conv2d, layers=None,
+                               start_n=0, replace_activs=False, verbose=False, n_to_replace=0):
+    # raise NotImplementedError("i don't know how to dynamically adjust to operation order with different actiovations/batchnorms etc")
+    # print("this deletes ALL activations...how to implement=?")
+    def get_layers(component):
+        convs = []
+        for submodule in component.named_children():
+            if len(list(submodule[1].named_children())) != 0:
+                convs.extend(flatten_list(get_layers(submodule[1])))
+            else:
+                convs.append(submodule)
+        return flatten_list(convs)
+
+    if layers is None:
+        layers = get_layers(net)
+        start_n = [0]
+    if verbose:
+        print([x for x in layers[start_n[0]:start_n[0] + min(len(list(net.named_children())), 10)]])
+    for name, submodule in net.named_children():
+        # print("Testing", str(submodule) if type(submodule) != torch.nn.Sequential else "Sequential(...)")
+        if type(submodule) == from_class:
+            replace_activs = True
+            cnt = 1
+            newActivs = []
+            skipWhile = False
+            if len(layers) <= start_n[0] + 1:
+                if verbose:
+                    print("We have reached end of layers array, skipping...")
+                skipWhile = True
+
+            if verbose:
+                print(submodule, layers[start_n[0]][1])
+                print("found layer", str(layers[start_n[0]][1]), "Looking for shape-preserving layers...")
+            while not skipWhile:
+                if any(map(str(layers[start_n[0] + cnt][1]).__contains__, ["Dropout", "Norm", "ReLU", "ELU",
+                                                                           "Hardshrink", "Hardsigmoid", "Hardtanh",
+                                                                           "Hardswish", "Sigmoid", "SiLU", "Mish",
+                                                                           "Softplus", "Softshrink", "Softsign", "Tanh",
+                                                                           "Threshold", "GLU"])):
+                    if verbose:
+                        print("Layer", str(layers[start_n[0] + cnt][1]), "found, adding to list")
+                    newActivs.append(copy.deepcopy(layers[start_n[0] + cnt][1]))
+                    cnt += 1
+                else:
+                    if verbose:
+                        print("Layer", str(layers[start_n[0] + cnt][1]), "not shape preserving, apparently")
+                    break
+            if type(net) != torch.nn.Sequential:
+                original = getattr(net, name)
+            else:
+                original = net[int(name)]
+            if verbose:
+                print("Final List of mid-layers:", newActivs)
+            if not skipWhile:
+                if verbose:
+                    print("Creating new DAU layer")
+                new = DownActivUp(original.in_channels, original.out_channels, original.kernel_size,
+                                  original.stride, original.padding, original.dilation, original.groups,
+                                  original.bias, original.weight.device, perforation_mode=perforation_mode,
+                                  activation=torch.nn.Sequential(*newActivs))
+
+            else:
+                ...#output layer should? be non-perforated maybe
+                new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
+                                       original.stride, original.padding, original.dilation, original.groups,
+                                       original.bias, original.weight.device, perforation_mode=perforation_mode)
+            if verbose:
+                print("New layer:", new, "for name", name, "on layer", net._get_name())
+            if pretrained:
+                if verbose:
+                    print(pretrained, submodule, name)
+                with torch.no_grad():
+                    new.weight = torch.nn.Parameter(torch.clone(original.weight))
+                    if type(original.bias) == bool:
+                        if original.bias:
+                            new.bias = torch.nn.Parameter(torch.clone(original.bias))
+                    elif hasattr(original.bias, "shape"):
+                        new.bias = torch.nn.Parameter(torch.clone(original.bias))
+            if type(net) != torch.nn.Sequential:
+                setattr(net, name, new)
+            else:
+                net[int(name)] = new
+            start_n[0] += 1
+        elif len(list(submodule.children())) == 0 and any(
+                map(str(submodule).__contains__, ["Dropout", "Norm", "ReLU", "ELU",
+                                                  "Hardshrink", "Hardsigmoid", "Hardtanh", "Hardswish", "Sigmoid",
+                                                  "SiLU", "Mish",
+                                                  "Softplus", "Softshrink", "Softsign", "Tanh", "Threshold", "GLU"])):
+            start_n[0] += 1
+            if replace_activs:
+                if verbose:
+                    print("Setting layer", submodule, "to Identity()...")
+                if type(net) != torch.nn.Sequential:
+                    setattr(net, name, torch.nn.Identity())
+                else:
+                    net[int(name)] = torch.nn.Identity()
+            else:
+                replace_activs = False
+        elif len(list(submodule.children())) != 0:
+            if verbose:
+                print("Recursing deeper...")
+            replace_module_downActivUp(submodule, perforation_mode, pretrained, from_class=from_class, layers=layers,
+                                       start_n=start_n, replace_activs=replace_activs, verbose=verbose)
+        else:
+            #None of the valid replacement layers
+            start_n[0] += 1
 
 def _get_perforation(self, part=None):
     if part is None:
@@ -236,7 +356,8 @@ def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,
 
 def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
                               verbose=False):
-    print("perforating network to ", perforation_mode, " DAU")
+    if verbose:
+        print("perforating network to ", perforation_mode, " DAU")
     if len(in_size) == 2:
         in_size = (2, 3, in_size[0], in_size[1])
     setattr(net, "in_size", in_size)
@@ -244,5 +365,5 @@ def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforat
     replace_module_downActivUp(net, from_class=from_class, perforation_mode=perforation_mode, pretrained=pretrained,
                                verbose=verbose)
     add_functs(net)
-    print(net.in_size)
+    #print(net.in_size)
     net._reset()

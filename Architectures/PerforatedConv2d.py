@@ -121,6 +121,10 @@ class PerforatedConv2d(nn.Module):
         self.original_conv_back = original_conv_back
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
+        #TODO
+        strided_backward = True
+
+
         if strided_backward is None:
             if grad_conv is None:
                 strided_backward = True
