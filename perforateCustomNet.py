@@ -173,7 +173,7 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
         layers = get_layers(net)
         start_n = [0]
     if verbose:
-        print([x for x in layers[start_n[0]:start_n[0] + min(len(list(net.named_children())), 10)]])
+        print("Layers applicable currently: ", [x for x in layers[start_n[0]+1:start_n[0] + min(len(list(net.named_children())), 10)]])
     for name, submodule in net.named_children():
         # print("Testing", str(submodule) if type(submodule) != torch.nn.Sequential else "Sequential(...)")
         if type(submodule) == from_class:
@@ -190,6 +190,11 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                 print(submodule, layers[start_n[0]][1])
                 print("found layer", str(layers[start_n[0]][1]), "Looking for shape-preserving layers...")
             while not skipWhile:
+                if start_n[0] + cnt >= len(layers):
+                    if verbose:
+                        print("At the end?=")
+                        print(layers, start_n, cnt)
+                    break
                 if any(map(str(layers[start_n[0] + cnt][1]).__contains__, ["Dropout", "Norm", "ReLU", "ELU",
                                                                            "Hardshrink", "Hardsigmoid", "Hardtanh",
                                                                            "Hardswish", "Sigmoid", "SiLU", "Mish",
@@ -256,7 +261,7 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                 replace_activs = False
         elif len(list(submodule.children())) != 0:
             if verbose:
-                print("Recursing deeper...")
+                print("Recursing deeper into...", submodule)
             replace_module_downActivUp(submodule, perforation_mode, pretrained, from_class=from_class, layers=layers,
                                        start_n=start_n, replace_activs=replace_activs, verbose=verbose)
         else:
@@ -276,7 +281,9 @@ def _get_perforation(self, part=None):
 
 
 def _set_perforation(self, perfs, part=None, start_n=0):
+
     if part is None:
+        print("Setting perforation mode to ", perfs)
         part = self
         start_n = [0]
     if type(perfs) == tuple:
@@ -307,9 +314,16 @@ def _reset(self):
             if list(c.children()) == [] and hasattr(c, "weight"):
                 return c.weight.device
             else:
+                if hasattr(c, "weight"):
+                    return c.weight.device
                 return find_dev(c)
-        print(net, flush=True)
-        raise AttributeError("No device found?")
+        if list(net.children()) == [] and hasattr(net, "weight"):
+            return net.weight.device
+        else:
+            if hasattr(net, "weight"):
+                return net.weight.device
+            print(net, flush=True)
+            raise AttributeError("No device found?")
 
     if self.training:
         # SPECIFIČNO DAU PROBLEM
@@ -342,7 +356,9 @@ def add_functs(net):
 
 
 def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
-                           in_size=(2, 3, 512, 512)):
+                           in_size=None):
+    if in_size is None:
+        in_size = (2,3,5,5)
     print("perforating network to ", perforation_mode, " perf")
     if len(in_size) == 2:
         in_size = (2, 3, in_size[0], in_size[1])
@@ -354,8 +370,10 @@ def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,
     net._reset()
 
 
-def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
+def perforate_net_downActivUp(net, in_size=None, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
                               verbose=False):
+    if in_size is None:
+        in_size = (2,3,5,5)
     if verbose:
         print("perforating network to ", perforation_mode, " DAU")
     if len(in_size) == 2:
@@ -367,3 +385,10 @@ def perforate_net_downActivUp(net, in_size, from_class=torch.nn.Conv2d, perforat
     add_functs(net)
     #print(net.in_size)
     net._reset()
+
+class layerWrapper(torch.nn.Module):
+    def __init__(self, layer):
+        super(layerWrapper, self).__init__()
+        self.layer = layer
+    def forward(self, x):
+        return self.layer(x)

@@ -51,10 +51,15 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     int64_t inputWidth = input.size(2);
     int64_t inputHeight = input.size(3);
 
+    int64_t x = dWp - 1;// + jitterW; //+ padding for jitter in interpolation, if we ever do that
+    int64_t y = dHp - 1;// + jitterH;
     int64_t outW = int((inputWidth - ((kW - 1) * dilW) + 2 * padW - 1)  / dW) + 1;
     int64_t outH = int((inputHeight - ((kH - 1) * dilH) + 2 * padH - 1)  / dH) + 1;
+
     //std::cerr << "before downsampling\n";
     //TODO
+    //int64_t jitterH = 0;
+    //int64_t jitterW = 0;
     if ((kW == 1 && kH == 1) || (dWp < 2 && dHp < 2)){//if kernel is 1x1, or if both strides are 1 -> just normal conv2d
         if (verbose){
             std::cout << "Using torch impl, with kernel size " << kW << " x " << kH << ", and stride " << dWp << " x " << dHp << std::endl;
@@ -73,9 +78,18 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //auto t1 = high_resolution_clock::now();//TODO we don't need to save to variable, can just use directly?= speedup maybe
 
     //---downsampling conv---
-    torch::Tensor output = at::convolution(input, weights, bias, torch::IntArrayRef({dW * dWp, dH * dHp}), torch::IntArrayRef({padW, padH}),
+    torch::Tensor output;
+    //if (jitterW == 0 && jitterH == 0){
+        output = at::convolution(input, weights, bias, torch::IntArrayRef({dW * dWp, dH * dHp}), torch::IntArrayRef({padW, padH}),
                                     torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
                                     torch::IntArrayRef({0, 0}) /*out padding?*/, groups);
+    //}else{
+        //this already works for jitter forward, figure out how tf to do that to gradient
+    //    output = at::convolution(input, weights, bias, torch::IntArrayRef({dW * dWp, dH * dHp}), torch::IntArrayRef({padW+jitterW, padH+jitterH}),
+    //                                torch::IntArrayRef({dilW, dilH}), false /*if transpose conv*/,
+    //                                torch::IntArrayRef({0, 0}) /*out padding?*/, groups);
+    //}
+
     //std::cerr << "after conv\n";
     //TODO test transpose convolution---------------------------------------------------------------------------------
     //std::cerr << dW<<dH<<padW<<padH<<std::endl;
@@ -84,8 +98,7 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     //self.mod1 = ((self.out_x - 1) % self.perf_stride[0]) + 1
     //self.mod2 = ((self.out_y - 1) % self.perf_stride[1]) + 1
     //padding = (self.mod1 - self.n1) % self.mod1, (self.mod2 - self.n2) % self.mod2 // postane 0, ker so n1 0 , torej a % a = 0
-    int64_t x = dWp - 1; //+ padding for jitter in interpolation, if we ever do that
-    int64_t y = dHp - 1;
+
 
 
     if ((dWp > 2) || (dHp > 2) || upscale_conv){//if either perf stride is >2, or if we want to force it
@@ -125,7 +138,7 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     int64_t lastH = (output.size(3)-1) * dHp;
 
     //std::cerr << "before interp" << std::endl;
-    if (dHp > 1){
+    if (dHp > 1){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
         out.index_put_({
             torch::indexing::Slice(),
             torch::indexing::Slice(),
@@ -148,7 +161,7 @@ std::vector<torch::Tensor> conv_forward(torch::Tensor input,
     }
 
     //std::cerr << "mid interp" << std::endl;
-    if (dWp > 1){
+    if (dWp > 1){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
         out.index_put_(
             {torch::indexing::Slice(),
              torch::indexing::Slice(),

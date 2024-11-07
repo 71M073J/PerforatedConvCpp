@@ -184,17 +184,19 @@ class Training:
             else:
                 if self.architecture == "unet_perf":
                     model = UNet(out_channels)
-                    perforate_net_perfconv(model, perforation_mode=(2, 2))
+                    perforate_net_perfconv(model, perforation_mode=(2, 2), in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet":
                     model = UNet(out_channels)
+                    perforate_net_perfconv(model, perforation_mode=(2, 2), in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
+                    model._set_perforation((1,1))
                 elif self.architecture == "unet2":
-                    model = UNetPerf(out_channels, perforation_mode=(2, 2))
+                    model = UNetPerf(out_channels, perforation_mode=(2, 2), in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
                     # perforate_net_perfconv(model, perforation_mode=(1,1))
                 elif self.architecture == "unet_dau":
                     model = UNet(out_channels)  # UNetDAU(out_channels)
                     if self.perforate_at_epoch == 0:
                         perforate_net_downActivUp(model, perforation_mode=(2, 2),
-                                              in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                                              in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom":
                     model = UNetCustom(out_channels)
                     # perforate_net_downActivUp(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
@@ -203,7 +205,7 @@ class Training:
                     model = UNetCustom(out_channels)
                     if self.perforate_at_epoch == 0:
                         perforate_net_downActivUp(model, perforation_mode=(2, 2),
-                                              in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                                              in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
                     # perforate_net_perfconv(model, perforation_mode=(2,2), in_size=(1,3,self.image_resolution[0], self.image_resolution[1]))
                 elif self.architecture == "unet_custom_perf":
                     model = UNetCustom(out_channels)
@@ -211,7 +213,7 @@ class Training:
 
                     if self.perforate_at_epoch == 0:
                         perforate_net_perfconv(model, perforation_mode=(2, 2),
-                                           in_size=(1, 3, self.image_resolution[0], self.image_resolution[1]))
+                                           in_size=(2, 3, self.image_resolution[0], self.image_resolution[1]))
                 else:
                     raise ValueError("Unknown model architecture.")
         else:
@@ -458,6 +460,7 @@ if __name__ == "__main__":
     #architecture = "unet_perf"
     architectures = ["unet_custom","unet_custom_dau","unet_custom_perf", "unet_dau", "unet_perf", "unet2", "unet",]
     architectures = ["unet_custom_dau"]
+    architectures = ["unet"]
     for architecture in architectures:
         print("--------------------------\n\n")
         print(architecture)

@@ -36,8 +36,10 @@ class ImageDataset(Dataset):
         #print(self.X[item].shape)
         #print(self.y[item].shape)
         #print(self.tf(self.y[item]).shape)
-        return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
-
+        if self.transform is not None:
+            return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
+        else:
+            return self.tf(self.X[item]), self.tf(self.y[item])
 class ImageImporter:
     def __init__(
         self,

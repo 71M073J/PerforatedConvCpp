@@ -40,7 +40,6 @@ class ConvFunction(torch.autograd.Function):
 
         dW, dH, padW, padH, is_bias, device, dil1, dil2, groups, perf_stride, strided_backward, verbose, original_conv_back = ctx.params
         kW, kH = weights.shape[2], weights.shape[3]
-
         gradInput, gradWeight, gradBias = perfconv.backward(input, gradOutput, weights,
                                                             kW, kH,  # kernel
                                                             dW, dH,  # stride

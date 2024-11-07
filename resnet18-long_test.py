@@ -26,25 +26,8 @@ if __name__ == "__main__":
                                             transforms.RandomResizedCrop(size=32)
                                             ]),
                    transforms.RandomHorizontalFlip()])
-    if data == "cinic":
-        tf.append(transforms.Normalize([0.47889522, 0.47227842, 0.43047404],
-                                       [0.24205776, 0.23828046, 0.25874835]))
-        tf_test.append(transforms.Normalize([0.47889522, 0.47227842, 0.43047404],
-                                            [0.24205776, 0.23828046, 0.25874835]))
-        tf = transforms.Compose(tf)
-        tf_test = transforms.Compose(tf_test)
-        dataset1 = DataLoader(CINIC10(partition="train", download=True, transform=tf),  # collate_fn=col,
-                              num_workers=4, batch_size=bs, shuffle=True,
-                              generator=g)
-        dataset2 = DataLoader(
-            CINIC10(partition="valid", download=True, transform=tf_test), num_workers=4,  # collate_fn=col,
-            batch_size=bs, shuffle=True,
-            generator=g, )
-        dataset3 = DataLoader(
-            CINIC10(partition="test", download=True, transform=tf_test), num_workers=4,  # collate_fn=col,
-            batch_size=bs, shuffle=True,
-            generator=g, )
-    elif data == "cifar":
+
+    if data == "cifar":
 
         tf.extend([transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
         tf_test.extend([transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
@@ -66,8 +49,9 @@ if __name__ == "__main__":
     from Architectures.mobilenetv2 import mobilenet_v2 as perfmobilenetv2
     from torchvision.models import resnet18, mobilenet_v2, mobilenet_v3_small
     from perforateCustomNet import perforate_net_downActivUp as DAU
-    for arch, name in [(perfresnet, "perfresnet"), (perfmobilenetv3, "perfmobnetv3"), (perfmobilenetv2, "perfmobnetv2"),
-                       (resnet18, "DAUresnet"), (mobilenet_v3_small, "DAUmobnetv3"), (mobilenet_v2, "DAUmobnetv2")]:
+    for arch, name in [
+                       (resnet18, "DAUresnet"), (mobilenet_v3_small, "DAUmobnetv3"), (mobilenet_v2, "DAUmobnetv2"),
+                        (perfresnet, "perfresnet"), (perfmobilenetv3, "perfmobnetv3"), (perfmobilenetv2, "perfmobnetv2"),]:
         for perf in [(1,1),(2,2),(3,3),"random", "2by2_equivalent"]:
             vary_perf=None
             if type(perf) == str:
@@ -91,11 +75,11 @@ if __name__ == "__main__":
             #op = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=0.001)
             lr_scheduler = None
             make_imgs = False
-            prefix = "res"
+            prefix = "testFixPerf"
             epochs = 200
             if type(op) == torch.optim.SGD:
                 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=epochs)
-                if name.startswith("DAU"):
+                if name.startswith("DAU") and False:
                     lr_scheduler = torch.optim.lr_scheduler.SequentialLR(op, [torch.optim.lr_scheduler.LinearLR(op, start_factor=0.0001, total_iters=2),
                                       #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),
                                       #torch.optim.lr_scheduler.LinearLR(op, start_factor=0.01, total_iters=1),

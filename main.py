@@ -289,6 +289,7 @@ def test(epoch, test_every_n, plot_loss, n_conv, device, loss_fn, test_losses, v
             net.eval()
             if eval_mode is not None:
                 if type(eval_mode) == tuple:
+                    print(n_conv, eval_mode, [eval_mode], flush=True)
                     net._set_perforation([eval_mode] * n_conv)
 
                 else:
@@ -374,6 +375,8 @@ def test_net(net, batch_size=128, verbose=False, epochs=10, summarise=False, run
     n_conv = 0
     if hasattr(net, 'perforation'):
         n_conv = len(net.perforation)
+    elif hasattr(net, "_get_perforation"):
+        n_conv = len(net._get_perforation())
     p = net._get_perforation()
     minacc = 1000
     minacc = 1000

@@ -108,7 +108,7 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
             num_workers=num_workers, generator=g, )
     elif "agri" in data:
         print(image_resolution)
-        tf.append(transforms.RandomRotation(45))
+        # tf.append(transforms.RandomRotation(45)) #BECAUSE FOR SEGMENTATION GIANT BLACK ANGLES KILL PERFORMANCE!!!!!!!
         tf.append(NormalizeImageOnly([0.4858, 0.3100, 0.3815],
                                      [0.1342, 0.1193, 0.1214]))
         tf = transforms.Compose(tf)
@@ -244,6 +244,9 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         classes = classes.to(device)
         pred = net(batch)
         loss = loss_fn(pred, classes)
+        if torch.isnan(loss):
+            print("NaN loss reached, quitting...")
+            quit()
         loss.backward()
         losses.append(loss.item())
         if grad_clip is not None:
@@ -274,7 +277,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
 
 
 def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name, dataset):
-    train_mode = None
+
     valid_losses = []
     valid_accs = []
     results = {}
@@ -282,8 +285,6 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     conf = torch.zeros((sz, sz), device=device)
     # ep_valid_losses = []
     net.eval()
-    if hasattr(net, "_get_perforation"):
-        train_mode = net._get_perforation()
     with torch.no_grad():
         if eval_mode is not None:
             net._set_perforation(eval_mode)
@@ -308,17 +309,15 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 
                 acc = (softm.argmax(dim=1) == classes)
                 valid_accs.append(torch.sum(acc).detach().cpu() / batch_size)
-
+            if torch.isnan(valid_losses[-1]):
+                print("NaN loss reached, quitting...")
+                quit()
         if reporting:
             if file is not None:
                 print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}", file=file)
             print(f"Epoch mean acc: {np.mean(valid_accs).item()}, loss: {np.mean(valid_losses).item()}")
         # ep_valid_losses.append(l2.item() / (i + 1))
-    if train_mode is not None:
-        # print("returning to train mode", train_mode)
-        net._set_perforation(train_mode)
-        # print(train_mode, flush=True)
-        # net._reset()
+
 
     return valid_losses, valid_accs, results, conf.detach().cpu()
 
@@ -337,8 +336,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 
     if eval_modes is None:
         eval_modes = (None,)
-    n_conv = len(net._get_n_calc())
-
+    if hasattr(net, "_get_n_calc"):
+        n_conv = len(net._get_n_calc())
+    else:
+        n_conv = 0
+        eval_modes = [None,]
     # net._reset()
     print(f"starting run {run_name}...")
     timeElapsed = 0
@@ -366,12 +368,15 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item())
             print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s")
             print(results)
-
+        train_mode = None
+        if hasattr(net, "_get_perforation"):
+            train_mode = net._get_perforation()
         for ind, mode in enumerate(eval_modes):
 
             print("\ntesting eval mode", mode)
             if file is not None:
                 print("\ntesting eval mode", mode, file=file)
+
             valid_losses, valid_accs, allMetrics, ims = validate(net=net, valid_loader=valid_loader, device=device,
                                                                  loss_fn=loss_function,
                                                                  file=file, batch_size=batch_size, eval_mode=mode,
@@ -381,6 +386,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             if curr_loss < best_valid_losses[ind]:
                 best_valid_losses[ind] = curr_loss
                 best_models[ind] = copy.deepcopy(net.state_dict())
+        if train_mode is not None:
+            # print("returning to train mode", train_mode)
+            net._set_perforation(train_mode)
+            # print(train_mode, flush=True)
+            # net._reset()
         if scheduler is not None:
             scheduler.step()
             print(", Current LR:", scheduler.get_last_lr()[0])
@@ -437,7 +447,8 @@ def runAllTests():
             loss_fn = torch.nn.CrossEntropyLoss()
             if dataset == "agri":
                 loss_fn = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.1, 0.9])).to(device)
-                lr = 0.01
+
+                lr = 0.5
                 max_epochs = 300
                 batch_size = 32
             elif dataset == "ucihar":
@@ -478,7 +489,9 @@ def runAllTests():
                                     continue
                                 else:
                                     perf_type = None
-                            prefix = "allTests"
+
+                            prefix = "allTests_2"
+
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
@@ -490,8 +503,6 @@ def runAllTests():
                                             "unet" not in modelname and perf_type != "dau":
                                             #not learning, not resnet
                                             print(f"RE-running run {curr_file}")
-                                        elif type(perforation) == str:#TODO REMOVE
-                                            print("RERUNNING THE RANDOMPERF STUFF, TODO REMOVE")
                                         else:
                                             print("file for", curr_file, "already exists, skipping...")
                                             continue
@@ -501,6 +512,8 @@ def runAllTests():
                             else:
                                 sz = 6 if dataset == "ucihar" else 10
                                 net = model(num_classes=sz).to(device)
+
+
                             pretrained = True #keep default network init
                             if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
                                 if type(perf[0]) != str:  # is perf mode not a string
@@ -521,8 +534,14 @@ def runAllTests():
                                 print("Perforating base net for noperf training...")
                                 perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
                                 net._set_perforation((1,1))
-                            # if (dataset == "cifar" and perf_type == "dau") or mo:
-                            #    lr /= 10
+                            if perforation == 2:
+                                eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
+                            elif perforation == 3:
+                                eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
+                            elif perforation is None:
+                                eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
+                            else:
+                                eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
                             print("net:", modelname)
                             print("Dataset:", dataset)
                             print(max_epochs, "epochs")
@@ -534,7 +553,8 @@ def runAllTests():
                             print("Learning rate:", lr)
                             print("run name:", curr_file)
                             # continue
-                            net._reset()
+                            if hasattr(net, "_reset"):
+                                net._reset()
                             net.to(device)
 
                             #TODO make function to eval SPEED, MEMORY, FLOPS of each network, that is called if
@@ -548,6 +568,7 @@ def runAllTests():
                             #                     pretrained=pretrained)
 
 
+
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
@@ -559,10 +580,7 @@ def runAllTests():
                             if not os.path.exists(f"./{prefix}/imgs"):
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
-                            if perforation == 2 or perforation == 3:
-                                eval_modes[-1] = (4,4)
-                            else:
-                                eval_modes[-1] = (3,3)
+
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                                 best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                             valid_loader=valid_loader, test_loader=test_loader,
