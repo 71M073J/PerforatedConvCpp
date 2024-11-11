@@ -67,15 +67,16 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
     test = None
     tf = [transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)]
     if "agri" not in data:
-        if augment:
-            tf.extend([transforms.RandomChoice([transforms.RandomCrop(size=32, padding=4),
-                                                transforms.RandomResizedCrop(size=32)]),
-                       transforms.RandomHorizontalFlip()])
+        if "ucihar" in data:
+            tf.extend([transforms.RandomHorizontalFlip()])
+        else:
+            if augment:
+                tf.extend([transforms.RandomChoice([transforms.RandomCrop(size=32, padding=4),
+                                                    transforms.RandomResizedCrop(size=32, scale=(0.85, 1.))]),
+                           transforms.RandomHorizontalFlip()])
     else:
         if augment:
-            tf.extend([transforms.RandomChoice(
-                [transforms.RandomCrop(size=image_resolution[0], padding=int(image_resolution[0] / 8)),
-                 transforms.RandomResizedCrop(size=image_resolution[0])]),
+            tf.extend([transforms.RandomResizedCrop(size=image_resolution[0], scale=(0.5, 1.)),
                        transforms.RandomHorizontalFlip()])
     if data == "cinic":
         tf.append(transforms.RandomRotation(45))
@@ -222,16 +223,21 @@ def get_perfs(perforation_mode, n_conv):
         raise ValueError("Supported vary modes are \"random\" and \"2by2_equivalent\"")
     return perfs
 
-
+def get_first_layer_weights(net):
+    for sub in net.children():
+        if hasattr(sub, "weight"):
+            return sub.weight.grad.detach().clone().cpu()
+        elif len(list(sub.children())) != 0:
+            return get_first_layer_weights(sub)
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
-          perforation_mode, n_conv):
+          perforation_mode, n_conv, grad_ep):
     net.train()
     results = {}
     train_accs = []
     losses = []
     # entropies = 0
-    weights = []
-
+    grads = []
+    timet = 0
     torch.cuda.synchronize()
     t0 = time.time()
     for i, (batch, classes) in enumerate(data_loader):
@@ -248,6 +254,13 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             print("NaN loss reached, quitting...")
             quit()
         loss.backward()
+        if grad_ep:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            timet += (t1 - t0)
+            grads.append(get_first_layer_weights(net))
+            torch.cuda.synchronize()
+            t0 = time.time()
         losses.append(loss.item())
         if grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
@@ -270,10 +283,10 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
 
     torch.cuda.synchronize()
     t1 = time.time()
-    timet = (t1 - t0)
+    timet += (t1 - t0)
     for metric in results:
         results[metric] = torch.mean(torch.tensor(results[metric]))
-    return losses, train_accs, results, timet
+    return losses, train_accs, results, timet, grads
 
 
 def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, reporting, run_name, dataset):
@@ -322,6 +335,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
     return valid_losses, valid_accs, results, conf.detach().cpu()
 
 
+
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
@@ -350,14 +364,31 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
     for epoch in range(max_epochs):
+        grad_ep = (epoch + 1) in [1,2,3,5,10,20,50,100,200, max_epochs]
         if reporting:
             if file is not None:
                 print(f"\nEpoch {epoch} training:", file=file)
             print(f"\nEpoch {epoch} training:")
-        losses, train_accs, results, timet = train(net, op, train_loader, device, loss_fn=loss_function,
-                                            perforation_mode=perforation_mode,
+        losses, train_accs, results, timet, grads = train(net, op, train_loader, device, loss_fn=loss_function,
+                                            perforation_mode=perforation_mode, grad_ep=grad_ep,
                                             batch_size=batch_size, perforation_type=perforation_type, run_name=run_name,
                                             grad_clip=grad_clip, vary_perf=vary_perf, n_conv=n_conv)
+        if len(grads) != 0:
+            grads = torch.stack(grads)
+            n_bins = 500
+            y, x = torch.histogram(grads, bins=n_bins)
+            x = ((x + x.roll(-1)) * 0.5)[:-1] #calc bin centers
+            plt.bar(x, y, label="Gradient magnitude distribution", width=(x[-1] - x[0]) / (n_bins-1))
+            plt.xlabel("Bin limits")
+            plt.ylabel("Num. of gradient values")
+            plt.yscale("log")
+            plt.title(f"Gradient distribution, Epoch {epoch}")
+            plt.tight_layout()
+            newpath = f"./{prefix}/{run_name}_grad_imgs/"
+            if not os.path.exists(newpath):
+                os.makedirs(newpath)
+            plt.savefig(os.path.join(newpath, f"grad_hist_e{epoch}.png"))
+            plt.clf()
         timedelta = int(timet* 1000) / 1000
         timeElapsed += timet
         if reporting:
@@ -490,23 +521,11 @@ def runAllTests():
                                 else:
                                     perf_type = None
 
-                            prefix = "allTests_2"
+                            prefix = "allTests_3"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
-                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
-                                with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
-                                    try:
-                                        l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
 
-                                        if "resnet" not in modelname and l < 0.15 and \
-                                            "unet" not in modelname and perf_type != "dau":
-                                            #not learning, not resnet
-                                            print(f"RE-running run {curr_file}")
-                                        else:
-                                            print("file for", curr_file, "already exists, skipping...")
-                                            continue
-                                    except:pass
                             if "agri" in dataset:
                                 net = model(2).to(device)
                             else:
@@ -532,8 +551,11 @@ def runAllTests():
                                                  pretrained=pretrained)
                             else:
                                 print("Perforating base net for noperf training...")
+
                                 perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
                                 net._set_perforation((1,1))
+
+
                             if perforation == 2:
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
                             elif perforation == 3:
@@ -561,7 +583,7 @@ def runAllTests():
                             # "_best" file already exists so we can do stuff on already trained tests
 
                             #TODO: separate scripts for making images and scripts for training - why tf is one dependent on the other
-                            #TODO: aaaaaaaaa
+
                             #net = mobilenet_v2(num_classes=6).to(device)
                             #dataset = "ucihar"
                             #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
@@ -580,6 +602,9 @@ def runAllTests():
                             if not os.path.exists(f"./{prefix}/imgs"):
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
+
+                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                                continue #skip already processed configurations
 
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                                 best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
