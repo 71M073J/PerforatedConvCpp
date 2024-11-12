@@ -364,7 +364,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
     for epoch in range(max_epochs):
-        grad_ep = (epoch + 1) not in [1,2,3,5,10,20,50,100,200, max_epochs] #todo remove
+        grad_ep = (epoch + 1) in [1,2,3,5,10,20,50,100,200, max_epochs]
         if reporting:
             if file is not None:
                 print(f"\nEpoch {epoch} training:", file=file)
@@ -465,10 +465,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     architectures = [
-        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")],
-         ["cifar", "ucihar"], [32]],
+
+        [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]],
+        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"], [32]],
         # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
-        [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]]
+
     ]
 
     eval_modes = [None, (1, 1), (2, 2), (3, 3)]
@@ -555,7 +556,9 @@ def runAllTests():
                                 perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
                                 net._set_perforation((1,1))
 
-                            if modelname != "mobnetv3s" or perforation != "2by2_equivalent":continue #TODO
+
+
+
 
                             if perforation == 2:
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
@@ -584,12 +587,6 @@ def runAllTests():
                             # "_best" file already exists so we can do stuff on already trained tests
 
                             #TODO: separate scripts for making images and scripts for training - why tf is one dependent on the other
-
-                            #net = mobilenet_v2(num_classes=6).to(device)
-                            #dataset = "ucihar"
-                            #perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
-                            #                     pretrained=pretrained)
-
 
 
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
