@@ -287,7 +287,7 @@ def _set_perforation(self, perfs, part=None, start_n=0):
         part = self
         start_n = [0]
     if type(perfs) == tuple:
-        perfs = [perfs] * len(flatten_list(self._get_n_calc()))
+        perfs = [perfs] * len(flatten_list(self._get_perforation()))
     for submodule in part.children():
         if type(submodule) in [PerforatedConv2d, DownActivUp]:
             submodule.perf_stride = perfs[start_n[0]]
