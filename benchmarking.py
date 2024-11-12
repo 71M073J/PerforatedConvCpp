@@ -521,7 +521,7 @@ def runAllTests():
                                 else:
                                     perf_type = None
 
-                            prefix = "allTests_3"
+                            prefix = "allTests_last"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
