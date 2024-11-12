@@ -350,8 +350,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 
     if eval_modes is None:
         eval_modes = (None,)
-    if hasattr(net, "_get_n_calc"):
-        n_conv = len(net._get_n_calc())
+    if hasattr(net, "_get_perforation"):
+        n_conv = len(net._get_perforation())
     else:
         n_conv = 0
         eval_modes = [None,]
