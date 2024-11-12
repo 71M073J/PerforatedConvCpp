@@ -280,10 +280,11 @@ def _get_perforation(self, part=None):
     return flatten_list(convs)
 
 
-def _set_perforation(self, perfs, part=None, start_n=0):
+def _set_perforation(self, perfs, part=None, start_n=0, verbose=False):
 
     if part is None:
-        print("Setting perforation mode to ", perfs)
+        if verbose:
+            print("Setting perforation mode to ", perfs)
         part = self
         start_n = [0]
     if type(perfs) == tuple:

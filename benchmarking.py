@@ -33,7 +33,7 @@ from perforateCustomNet import perforate_net_downActivUp as perfDAU
 from Architectures.UnetCustom import UNet as UNetCustom
 from agriadapt.dl_scripts.UNet import UNet
 from torch import argmax, where, cat, stack
-import agriadapt.segmentation.settings as settings
+#import agriadapt.segmentation.settings as settings
 import agriadapt.segmentation.data.data as dd
 
 metrics = {
@@ -364,7 +364,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
     for epoch in range(max_epochs):
-        grad_ep = (epoch + 1) in [1,2,3,5,10,20,50,100,200, max_epochs]
+        grad_ep = (epoch + 1) not in [1,2,3,5,10,20,50,100,200, max_epochs] #todo remove
         if reporting:
             if file is not None:
                 print(f"\nEpoch {epoch} training:", file=file)
@@ -398,7 +398,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
                 print(results, file=file)
             print(f"Average Epoch {epoch} Train Loss:", np.mean(losses).item())
             print(f"Epoch mean acc: {np.mean(train_accs).item()}, Epoch time: {timedelta} s")
-            print(results)
+            if results != {}:
+                print(results)
         train_mode = None
         if hasattr(net, "_get_perforation"):
             train_mode = net._get_perforation()
@@ -551,10 +552,10 @@ def runAllTests():
                                                  pretrained=pretrained)
                             else:
                                 print("Perforating base net for noperf training...")
-
                                 perfPerf(net, in_size=in_size, perforation_mode=(2,2), pretrained=pretrained)
                                 net._set_perforation((1,1))
 
+                            if modelname != "mobnetv3s" or perforation != "2by2_equivalent":continue #TODO
 
                             if perforation == 2:
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
