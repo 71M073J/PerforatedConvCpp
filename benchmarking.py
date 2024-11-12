@@ -557,9 +557,6 @@ def runAllTests():
                                 net._set_perforation((1,1))
 
 
-
-
-
                             if perforation == 2:
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
                             elif perforation == 3:
