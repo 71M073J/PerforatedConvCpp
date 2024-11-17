@@ -668,8 +668,19 @@ def runAllTests():
                                                                          summarise=False)
 
 
-                                with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
-                                    print(best_out, file=ff)
+                                    with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
+                                        print(best_out, file=ff)
+                                    print("Now running profiling...")
+                                    if type(perforation) == str:
+                                        vary_perf = True
+                                    else:
+                                        vary_perf = None
+                                    pref = prefix + "/profiling"
+                                    if not os.path.exists(pref):
+                                        os.makedirs(pref)
+                                    profile_net(net, op, data_loader=train_loader, vary_perf=vary_perf,
+                                                batch_size=batch_size, curr_file=curr_file, perforation_mode=perf,
+                                                run_name=run_name, prefix=pref, loss_fn=loss_fn)
                                 continue #skip already processed configurations
 
                             print("net:", modelname)
