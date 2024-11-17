@@ -1,6 +1,8 @@
 import os
 import json
 
+import numpy as np
+
 architectures = [
         [[(..., "resnet18"), (..., "mobnetv2"), (..., "mobnetv3s")],
          ["cifar", "ucihar"], [32]],
@@ -23,6 +25,7 @@ def type_convert(typ):
 
 output = {}
 
+prefix = "allTests_last"
 for version in architectures:  # classigication, segmetnationg
     for dataset in version[1]:
         if dataset == "agri":
@@ -73,7 +76,6 @@ for version in architectures:  # classigication, segmetnationg
 
                         curr_file = f"{name}"
 
-                        prefix = "allTests"
 
                         run_name = f"{curr_file}"
                         if not os.path.exists(f"./{prefix}/"):
@@ -106,30 +108,33 @@ for version in architectures:  # classigication, segmetnationg
                                             else:
                                                 output[modelname][dataset][type_convert(perf_type)][img][pf][eval_mode] = acc
                                         elif "time" in evaluation:
-
                                             #print(evaluation)
-                                            output[modelname][dataset][type_convert(perf_type)][img]["Training time"] = evaluation.split(":")[1][:-2]
-                                            output[modelname][dataset][type_convert(perf_type)][img]["Training time improvement"] = str(int(10000 * (1 - \
-                                                float(output[modelname][dataset][type_convert(perf_type)][img]["Training time"].split()[0])/\
-                                                float(output[modelname][dataset][type_convert("")][img]["Training time"].split()[0]))) / 100) + "%"
+                                            output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time"] = evaluation.split(":")[1][:-2]
+                                            output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time improvement"] = str(int(10000 * (1 - \
+                                                float(output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time"].split()[0])/\
+                                                float(output[modelname][dataset][type_convert("")][img][pf.split(":")[0]+": None"]["Training time"].split()[0]))) / 100) + "%"
                                     elif "time" in evaluation:
                                         #print(evaluation)
-                                        output[modelname][dataset][type_convert(perf_type)][img]["Training time CPU"] = evaluation.split(":")[1][:-2]
-                                        output[modelname][dataset][type_convert(perf_type)][img]["Training time CPU improvement"] = str(int(10000 * (1 - \
-                                                float(output[modelname][dataset][type_convert(perf_type)][img]["Training time CPU"].split()[0])/\
-                                                float(output[modelname][dataset][type_convert("")][img]["Training time CPU"].split()[0]))) / 100) + "%"
+                                        output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU"] = evaluation.split(":")[1][:-2]
+                                        output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU improvement"] = str(int(10000 * (1 - \
+                                                float(output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU"].split()[0])/\
+                                                float(output[modelname][dataset][type_convert("")][img][pf.split(":")[0]+": None"]["Training time CPU"].split()[0]))) / 100) + "%"
 
                                     #print(evaluation)
                             #quit()
-
-
-
+generateResults = True
+if generateResults:
+    print(output)
+    with open("results.txt", "w") as f:
+        print(json.dumps(output, indent=4, sort_keys=True), file=f)
+print("skipping images...")
+quit()
 
 import matplotlib.pyplot as plt
 #output[modelname][dataset][type_convert(perf_type)][img][pf][eval_mode] = acc
 #output[modelname][dataset][type_convert(perf_type)][img]["Training time"] = evaluation.split(":")[1][:-2]
 
-for network in ["resnet18", "mobnetv2", "mobnetv3", "unet_agri", "unet_custom"]:
+for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
     for dataset in ["cifar", "ucihar", "agri"]:
         if "unet" in network and dataset != "agri": continue
         if "unet" not in network and dataset == "agri": continue
@@ -140,37 +145,54 @@ for network in ["resnet18", "mobnetv2", "mobnetv3", "unet_agri", "unet_custom"]:
                 name = f"{network}_{dataset}_{img}_{typ}"
 
                 locations = []
-                names = []
                 cnt = -1
-
-                for eval_mode in (1,2,3,4,None):#TODO
+                accs = np.zeros((4,5))
+                names = np.ndarray(shape=(5,5), dtype=object)
+                for ind, eval_mode in enumerate((1,2,3,4)):#TODO
 
                     ev = f"Evaluation perforation: {eval_mode}, {eval_mode}"
-                    if eval_mode == 1:#TODO remove
-                        ev = f"Evaluation perforation: Same as training"
 
-                    accs = []
+
                     locations = []
                     cnt += 1
-                    for pf in (None, 2, 3, "random", "2by2_equivalent"):
+                    cnt2 = -1
+                    baselineacc = 0
+                    for indd, pf in enumerate((None, 2, 3, "random", "2by2_equivalent")):#training perforation
                         pf2 = "Training perforation: " + str(pf)
-                        names.append(pf)
+
                         try:
                             if pf is None:
-                                acc = float(output[network][dataset]["No perforation"][str(img)][pf2][ev][:-1])
+                                baselineacc = float(output[network][dataset]["No perforation"][str(img)][pf2][ev][:-1])
+                                accs[ind][indd] = baselineacc
                             else:
                                 acc = float(output[network][dataset][typ][str(img)][pf2][ev][:-1])
-                            accs.append(acc)
-                            print(pf2.split(" ")[2], eval_mode, acc)
-                        except:pass
-                    plt.bar([x * 6 + cnt for x in range(len(accs))], accs)
-                    plt.tight_layout()
-                plt.show()
-                print(name, accs)
-                quit()
+                                accs[ind][indd] = acc
+                            names[ind][indd] = pf
 
-generateResults = False
-if generateResults:
-    print(output)
-    with open("results.txt", "w") as f:
-        print(json.dumps(output, indent=4, sort_keys=True), file=f)
+                        except:pass
+                for ind, ac in enumerate(accs):
+                    e = (1,2,3,4,None)[ind]
+                    plt.bar([x * 6 + ind for x in range(len(ac))], ac, label=f"Eval mode: {e},{e}")
+                plt.xticks([x * 6 + 2 for x in range(len(names))], [str(x) for x in names[0]], rotation=90)
+
+                plt.grid()
+                if dataset != "agri":
+                    plt.ylabel("Accuracy (%)")
+                    plt.yticks([x/10 for x in range(10)], [x*10 for x in range(10)])
+                else:
+                    plt.ylabel("IoU on class \"weeds\" (%)")
+                    plt.yticks([x/10 for x in range(8)], [x*10 for x in range(8)])
+                if not os.path.exists(f"./{prefix}/graphs"):
+                    os.makedirs(f"./{prefix}/graphs")
+
+                plt.legend(loc="lower right")
+                #plt.legend(loc="best")
+                plt.xlabel("Training perforation")
+                plt.tight_layout()
+                plt.savefig(f"./{prefix}/graphs/{network}_{dataset}_{img}_{typ}.png")
+                #plt.show()
+                plt.clf()
+                print(name, accs)
+                #quit()
+
+

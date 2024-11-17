@@ -118,15 +118,16 @@ for version in architectures:  # classigication, segmetnationg
         loss_fn = torch.nn.CrossEntropyLoss()
         if dataset == "agri":
             loss_fn = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.1, 0.9])).to(device)
-            lr = 0.01
-            max_epochs = 10
+
+            lr = 0.5
+            max_epochs = 300
             batch_size = 32
         elif dataset == "ucihar":
-            max_epochs = 10
+            max_epochs = 100
             batch_size = 32
             lr = 0.01
         else:
-            max_epochs = 10
+            max_epochs = 200
             batch_size = 32
             lr = 0.01
 
@@ -159,143 +160,21 @@ for version in architectures:  # classigication, segmetnationg
                                 continue
                             else:
                                 perf_type = None
-                        if not os.path.exists("./allTests/cpu"):
-                            os.makedirs("./allTests/cpu")
-                        prefix = "allTests/cpu"
+
+                        prefix = "allTests_last"
+                        if not os.path.exists(f"./{prefix}/cpu"):
+                            os.makedirs(f"./{prefix}/cpu")
+                        prefix = prefix + "/cpu"
                         name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                         curr_file = f"{name}"
-                        if not os.path.exists(f"./allTests/profiling/{curr_file}_cuda.txt"):
+                        if not os.path.exists(f"./{prefix}/profiling/{curr_file}_cuda.txt"):
                             print("RUNNING PROFILING...")
-                            vary_perf = None
-                            if type(perforation) == str:
-                                vary_perf = True
-                            else:
-                                vary_perf = None
-                            if "agri" in dataset:
-                                net = model(2).to(device)
-                            else:
-                                sz = 6 if dataset == "ucihar" else 10
-                                net = model(num_classes=sz).to(device)
-                            pretrained = True  # keep default network init
-                            if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
-                                if type(perf[0]) != str:  # is perf mode not a string
-                                    if "dau" in perf_type.lower():
-                                        perfDAU(net, in_size=in_size, perforation_mode=perf,
-                                                pretrained=pretrained)
-                                    elif "perf" in perf_type.lower():
-                                        perfPerf(net, in_size=in_size, perforation_mode=perf,
-                                                 pretrained=pretrained)
-                                else:  # it is a string
-                                    if "dau" in perf_type.lower():
-                                        perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
-                                                pretrained=pretrained)
-                                    elif "perf" in perf_type.lower():
-                                        perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
-                                                 pretrained=pretrained)
-                            else:
-                                print("Perforating base net for noperf training...")
-                                perfPerf(net, in_size=in_size, perforation_mode=(2, 2), pretrained=pretrained)
-                                net._set_perforation((1, 1))
-                            pref = "allTests/profiling"
-                            n_conv = len(net._get_n_calc())
+
+
+                            pref = f"{prefix}/profiling"
+
                             if not os.path.exists(pref):
                                 os.makedirs(f"./{pref}")
-                            op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
-                            train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
-                                                                                   image_resolution=img_res)
                             profile_net(net, op=op, data_loader=train_loader, n_conv=n_conv, vary_perf=vary_perf,
                                         perforation_mode=perf, run_name=curr_file, prefix=pref, loss_fn=loss_fn)
-                        if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
-                            print("file exists...")
-                            with open(f"./{prefix}/{curr_file}_best.txt", "r") as pread:
-                                try:
-                                    l = float(pread.readline().split("Validation acc (None):")[1].split("'")[0])
-
-                                    if "resnet" not in modelname and l < 0.15 and "unet" not in modelname and perf_type != "dau":
-                                        # not learning, not resnet
-                                        print(f"RE-running run {curr_file}")
-
-                                    else:
-                                        print("file for", curr_file, "already exists, skipping...")
-                                        continue
-                                except:
-                                    print("opening file failed????")
-                                    continue
-                                    pass
-                        print(prefix)
-                        print(curr_file)
-                        print("Training due to missing out files...")
-
-                        if "agri" in dataset:
-                            net = model(2).to(device)
-                        else:
-                            sz = 6 if dataset == "ucihar" else 10
-                            net = model(num_classes=sz).to(device)
-                        pretrained = True  # keep default network init
-                        if perf[0] is not None:  # do we want to perforate? # Is the net not already perforated?
-                            if type(perf[0]) != str:  # is perf mode not a string
-                                if "dau" in perf_type.lower():
-                                    perfDAU(net, in_size=in_size, perforation_mode=perf,
-                                            pretrained=pretrained)
-                                elif "perf" in perf_type.lower():
-                                    perfPerf(net, in_size=in_size, perforation_mode=perf,
-                                             pretrained=pretrained)
-                            else:  # it is a string
-                                if "dau" in perf_type.lower():
-                                    perfDAU(net, in_size=in_size, perforation_mode=(2, 2),
-                                            pretrained=pretrained)
-                                elif "perf" in perf_type.lower():
-                                    perfPerf(net, in_size=in_size, perforation_mode=(2, 2),
-                                             pretrained=pretrained)
-                        else:
-                            print("Perforating base net for noperf training...")
-                            perfPerf(net, in_size=in_size, perforation_mode=(2, 2), pretrained=pretrained)
-                            net._set_perforation((1, 1))
-                        # if (dataset == "cifar" and perf_type == "dau") or mo:
-                        #    lr /= 10
-                        print("net:", modelname)
-                        print("Dataset:", dataset)
-                        print(max_epochs, "epochs")
-                        print("perforation mode", perf)
-                        print("perforation type:", perf_type)
-                        print("batch_size:", batch_size)
-                        print("loss fn", loss_fn)
-                        print("eval modes", eval_modes)
-                        print("Learning rate:", lr)
-                        print("run name:", curr_file)
-                        # continue
-                        net._reset()
-                        net.to(device)
-
-                        # TODO make function to eval SPEED, MEMORY, FLOPS of each network, that is called if
-                        # "_best" file already exists so we can do stuff on already trained tests
-
-                        # TODO: separate scripts for making images and scripts for training - why tf is one dependent on the other
-                        # TODO: aaaaaaaaa
-
-                        op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
-                        train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
-                                                                               image_resolution=img_res)
-                        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
-
-                        run_name = f"{curr_file}"
-                        if not os.path.exists(f"./{prefix}/"):
-                            os.mkdir(f"./{prefix}")
-                        if not os.path.exists(f"./{prefix}/imgs"):
-                            os.mkdir(f"./{prefix}/imgs")
-                        print("starting run:", curr_file)
-                        with open(f"./{prefix}/{curr_file}.txt", "w") as f:
-                            best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
-                                                                 valid_loader=valid_loader, test_loader=test_loader,
-                                                                 max_epochs=max_epochs, device=device,
-                                                                 perforation_mode=perf,
-                                                                 run_name=run_name, batch_size=batch_size,
-                                                                 loss_function=loss_fn, prefix=prefix,
-                                                                 eval_modes=eval_modes, in_size=in_size,
-                                                                 dataset=dataset,
-                                                                 perforation_type=perf_type, file=f, summarise=False)
-
-
-                        with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
-                            print(best_out, file=ff)
 

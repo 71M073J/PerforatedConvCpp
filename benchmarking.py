@@ -49,6 +49,58 @@ torch.manual_seed(123)
 np.random.seed(123)
 num_workers = 1
 
+def profile_net(net, op, data_loader, vary_perf, batch_size, curr_file,
+                perforation_mode, run_name, prefix, loss_fn):
+    n_conv = 0
+    if hasattr(net, "_get_perforation"):
+        n_conv = len(net._get_perforation())
+    for dev in ["cuda", "cpu"]:
+        net.train()
+        net.to(dev)
+        results = {}
+        train_accs = []
+        losses = []
+        loss_fn = loss_fn.to(dev)
+        with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ], profile_memory=True,
+        ) as p:
+            for i, (batch, classes) in enumerate(data_loader):
+                if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
+                    perfs = get_perfs(perforation_mode[0], n_conv)
+                    net._set_perforation(perfs)
+                    # net._reset()
+
+                batch = batch.to(dev)
+                classes = classes.to(dev)
+                pred = net(batch)
+                if pred.device != classes.device:
+                    loss = loss_fn(pred.cpu(), classes.cpu())
+                else:
+                    loss = loss_fn(pred, classes)
+                loss.backward()
+                losses.append(loss.item())
+
+                op.step()
+                op.zero_grad()
+                if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
+                    # print("Should be here")
+                    acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
+                    train_accs.append(torch.sum(acc) / batch_size)
+                else:
+                    calculate_segmentation_metrics(classes, pred, run_name, metrics, dev, results)
+                    acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
+                    train_accs.append(acc)
+                break
+
+        with open(f"./{prefix}/{curr_file}_{dev}.txt", "w") as ff:
+            print(p.key_averages().table(
+                sort_by="self_cuda_time_total", row_limit=-1), file=ff)
+            print(p.key_averages().table(
+                sort_by="self_cuda_time_total", row_limit=-1))
+
 
 class NormalizeImageOnly(torch.nn.Module):
     def __init__(self, means, stds):
@@ -339,7 +391,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss(), run_name="test",
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
-              summarise=True, pretrained=True, dataset="idk", prefix="",
+              summarise=True, pretrained=True, dataset="idk", prefix="", do_grad=False, savemodels=False,
               device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
     if type(perforation_mode) not in [tuple, list]:
         perforation_mode = (perforation_mode, perforation_mode)
@@ -363,8 +415,10 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         summary(net, input_size=in_size)
     best_valid_losses = [999] * len(eval_modes)
     best_models = [None] * len(eval_modes)
+    grad_ep = False
     for epoch in range(max_epochs):
-        grad_ep = (epoch + 1) in [1,2,3,5,10,20,50,100,200, max_epochs]
+        if do_grad:
+            grad_ep = (epoch + 1) in [1,2,3,5,10,20,50,100,200, max_epochs]
         if reporting:
             if file is not None:
                 print(f"\nEpoch {epoch} training:", file=file)
@@ -441,7 +495,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         if not os.path.exists(f"./{prefix}/models"):
             os.makedirs(f"./{prefix}/models")
         #Save models for evaluation purposes
-        torch.save(best_models[ind], f"./{prefix}/models/{run_name}.model")
+        if savemodels:
+            torch.save(best_models[ind], f"./{prefix}/models/{run_name}.model")
         #net.eval()
         print("\nValidating eval mode", mode)
         test_losses, test_accs, allMetrics, conf = validate(net=net, valid_loader=test_loader, device=device,
@@ -565,16 +620,7 @@ def runAllTests():
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
                             else:
                                 eval_modes = [(1, 1), (2, 2), (3, 3), (4, 4)]
-                            print("net:", modelname)
-                            print("Dataset:", dataset)
-                            print(max_epochs, "epochs")
-                            print("perforation mode", perf)
-                            print("perforation type:", perf_type)
-                            print("batch_size:", batch_size)
-                            print("loss fn", loss_fn)
-                            print("eval modes", eval_modes)
-                            print("Learning rate:", lr)
-                            print("run name:", curr_file)
+
                             # continue
                             if hasattr(net, "_reset"):
                                 net._reset()
@@ -599,14 +645,49 @@ def runAllTests():
                             print("starting run:", curr_file)
 
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                                print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
+                                if not os.path.exists(f"./{prefix}/cpu"):
+                                    os.makedirs(f"./{prefix}/cpu")
+                                pref = prefix + "/cpu"
+                                max_epochs = 10
+                                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
+                                device = "cpu"
+                                net.to(device)
+                                loss_fn.to(device)
+                                with open(f"./{prefix}/{curr_file}.txt", "w") as f:
+                                    best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
+                                                                         valid_loader=valid_loader,
+                                                                         test_loader=test_loader,
+                                                                         max_epochs=max_epochs, device=device,
+                                                                         perforation_mode=perf,
+                                                                         run_name=run_name, batch_size=batch_size,
+                                                                         loss_function=loss_fn, prefix=pref,
+                                                                         eval_modes=eval_modes, in_size=in_size,
+                                                                         dataset=dataset,
+                                                                         perforation_type=perf_type, file=f,
+                                                                         summarise=False)
+
+
+                                with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
+                                    print(best_out, file=ff)
                                 continue #skip already processed configurations
 
+                            print("net:", modelname)
+                            print("Dataset:", dataset)
+                            print(max_epochs, "epochs")
+                            print("perforation mode", perf)
+                            print("perforation type:", perf_type)
+                            print("batch_size:", batch_size)
+                            print("loss fn", loss_fn)
+                            print("eval modes", eval_modes)
+                            print("Learning rate:", lr)
+                            print("run name:", curr_file)
                             with open(f"./{prefix}/{curr_file}.txt", "w") as f:
                                 best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                             valid_loader=valid_loader, test_loader=test_loader,
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
-                                                            run_name=run_name, batch_size=batch_size,
-                                                            loss_function=loss_fn,prefix=prefix,
+                                                            run_name=run_name, batch_size=batch_size, savemodels=True,
+                                                            loss_function=loss_fn,prefix=prefix,do_grad=True,
                                                             eval_modes=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
 
