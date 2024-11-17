@@ -646,15 +646,19 @@ def runAllTests():
 
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
                                 print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
-                                if not os.path.exists(f"./{prefix}/cpu"):
-                                    os.makedirs(f"./{prefix}/cpu")
                                 pref = prefix + "/cpu"
+                                if not os.path.exists(f"./{prefix}"):
+                                    os.makedirs(f"./{prefix}")
+
                                 max_epochs = 10
                                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
                                 device = "cpu"
                                 net.to(device)
                                 loss_fn.to(device)
-                                with open(f"./{prefix}/{curr_file}.txt", "w") as f:
+                                if os.path.exists(f"./{pref}/{curr_file}_best.txt"):
+                                    print("cpu speedtest exists, next")
+                                    continue
+                                with open(f"./{pref}/{curr_file}.txt", "w") as f:
                                     best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
                                                                          valid_loader=valid_loader,
                                                                          test_loader=test_loader,
@@ -668,7 +672,7 @@ def runAllTests():
                                                                          summarise=False)
 
 
-                                    with open(f"./{prefix}/{curr_file}_best.txt", "w") as ff:
+                                    with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
                                         print(best_out, file=ff)
                                     print("Now running profiling...")
                                     if type(perforation) == str:
@@ -676,6 +680,9 @@ def runAllTests():
                                     else:
                                         vary_perf = None
                                     pref = prefix + "/profiling"
+                                    if os.path.exists(f"./{pref}/{curr_file}_cpu.txt"):
+                                        print("profiling also exists, next...")
+                                        continue
                                     if not os.path.exists(pref):
                                         os.makedirs(pref)
                                     profile_net(net, op, data_loader=train_loader, vary_perf=vary_perf,
