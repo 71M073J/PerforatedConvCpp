@@ -293,7 +293,9 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
     # entropies = 0
     grads = []
     timet = 0
-    torch.cuda.synchronize()
+    haveCuda = torch.cuda.is_available()
+    if haveCuda:
+        torch.cuda.synchronize()
     t0 = time.time()
     for i, (batch, classes) in enumerate(data_loader):
         if vary_perf is not None and n_conv > 0 and type(perforation_mode[0]) == str:
@@ -310,11 +312,13 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             quit()
         loss.backward()
         if grad_ep:
-            torch.cuda.synchronize()
+            if haveCuda:
+                torch.cuda.synchronize()
             t1 = time.time()
             timet += (t1 - t0)
             grads.append(get_first_layer_weights(net))
-            torch.cuda.synchronize()
+            if haveCuda:
+                torch.cuda.synchronize()
             t0 = time.time()
         losses.append(loss.item())
         if grad_clip is not None:
@@ -335,8 +339,8 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         #    probs=torch.maximum(F.softmax(pred.detach().cpu(), dim=1), torch.tensor(1e-12)))  # F.softmax(pred.detach().cpu(), dim=1)
         # entropies += entropy.entropy().mean()
         # acc = (F.softmax(pred.detach().cpu(), dim=1).argmax(dim=1) == classes)
-
-    torch.cuda.synchronize()
+    if haveCuda:
+        torch.cuda.synchronize()
     t1 = time.time()
     timet += (t1 - t0)
     for metric in results:
@@ -650,8 +654,8 @@ def runAllTests():
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt") or cpuRun:
                                 print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
                                 pref = prefix + "/cpu"
-                                if not os.path.exists(f"./{prefix}"):
-                                    os.makedirs(f"./{prefix}")
+                                if not os.path.exists(f"./{pref}"):
+                                    os.makedirs(f"./{pref}")
 
                                 max_epochs = 10
                                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
