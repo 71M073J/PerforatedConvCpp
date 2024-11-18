@@ -52,6 +52,11 @@ torch.manual_seed(123)
 np.random.seed(123)
 num_workers = 1
 
+try:
+    a = CINIC10
+except:
+    CINIC10 = None
+
 def profile_net(net, op, data_loader, vary_perf, batch_size, curr_file,
                 perforation_mode, run_name, prefix, loss_fn):
     n_conv = 0
@@ -120,6 +125,7 @@ class NormalizeImageOnly(torch.nn.Module):
 
 def get_datasets(data, batch_size, augment=True, image_resolution=None):
     test = None
+
     tf = [transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)]
     if "agri" not in data:
         if "ucihar" in data:
