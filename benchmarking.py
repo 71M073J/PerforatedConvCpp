@@ -22,7 +22,11 @@ from agriadapt.segmentation.data.data import ImageDataset as AgriDataset
 from torch.distributions import Categorical
 from contextlib import ExitStack
 from torchinfo import summary
-from pytorch_cinic.dataset import CINIC10
+noCinic = False
+try:
+    from pytorch_cinic.dataset import CINIC10
+except:
+    noCinic = True
 from ucihar import UciHAR
 # from Architectures.PerforatedConv2d import PerforatedConv2d
 # from Architectures.mobilenetv2 import MobileNetV2
@@ -130,7 +134,7 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         if augment:
             tf.extend([transforms.RandomResizedCrop(size=image_resolution[0], scale=(0.5, 1.)),
                        transforms.RandomHorizontalFlip()])
-    if data == "cinic":
+    if data == "cinic" and not noCinic:
         tf.append(transforms.RandomRotation(45))
         tf.append(transforms.Normalize([0.47889522, 0.47227842, 0.43047404],
                                        [0.24205776, 0.23828046, 0.25874835]))
