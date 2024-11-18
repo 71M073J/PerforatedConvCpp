@@ -2,10 +2,7 @@ import copy
 
 import numpy as np
 import torch
-import torchvision
-from pytorch_cinic.dataset import CINIC10
 from torch.utils.data import Dataset
-from torchvision.transforms import transforms
 
 
 def tensorise(x, channels=3):
