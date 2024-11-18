@@ -643,8 +643,8 @@ def runAllTests():
                             if not os.path.exists(f"./{prefix}/imgs"):
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
-
-                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                            cpuRun = False
+                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt") or cpuRun:
                                 print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
                                 pref = prefix + "/cpu"
                                 if not os.path.exists(f"./{prefix}"):
@@ -655,7 +655,7 @@ def runAllTests():
                                 device = "cpu"
                                 net.to(device)
                                 loss_fn.to(device)
-                                if os.path.exists(f"./{pref}/{curr_file}_best.txt"):
+                                if os.path.exists(f"./{pref}/{curr_file}_best.txt") and not cpuRun:
                                     print("cpu speedtest exists, next")
                                     continue
                                 with open(f"./{pref}/{curr_file}.txt", "w") as f:
@@ -674,6 +674,7 @@ def runAllTests():
 
                                     with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
                                         print(best_out, file=ff)
+                                    if cpuRun:continue
                                     print("Now running profiling...")
                                     if type(perforation) == str:
                                         vary_perf = True
