@@ -22,7 +22,6 @@ from agriadapt.segmentation.data.data import ImageDataset as AgriDataset
 from torch.distributions import Categorical
 from contextlib import ExitStack
 from torchinfo import summary
-noCinic = False
 try:
     from pytorch_cinic.dataset import CINIC10
 except:
