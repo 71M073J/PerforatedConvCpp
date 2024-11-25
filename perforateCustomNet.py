@@ -342,6 +342,7 @@ def _get_n_calc(self, part=None):
     convs = []
     for submodule in part.children():
         if type(submodule) in [PerforatedConv2d, DownActivUp]:
+            submodule._get_calculations()
             convs.append(submodule.calculations)
         elif len(list(submodule.children())) != 0:
             convs.append(self._get_n_calc(submodule))

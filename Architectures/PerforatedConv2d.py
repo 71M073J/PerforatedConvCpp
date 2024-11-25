@@ -1,12 +1,10 @@
-from typing import Callable
-
+import math
 from torch import nn
 import torch
 import torch.nn.functional as F
 import perfconv
-from torch.utils.cpp_extension import load
+#from torch.utils.cpp_extension import load
 
-#TODO in cpp file, add the dtype option as a param
 class DeviceError(Exception):
     pass
 
@@ -21,7 +19,7 @@ class ConvFunction(torch.autograd.Function):
         kW, kH = weights.shape[2], weights.shape[3]
         # try:
         outputs = \
-            perfconv.forward(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+            perfconv.forward_newUp(input, weights, bias, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                              is_bias, device, dil1, dil2, groups, upscale_conv, verbose)[0]
         # except Exception:
         #    print(traceback.format_exc())
@@ -58,7 +56,7 @@ class Up(torch.autograd.Function):
         # try:
 
         outputs = \
-            perfconv.upscale(input, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
+            perfconv.upscale_newUp(input, kW, kH, dW, dH, perf_stride[0], perf_stride[1], padW, padH,
                               is_bias, device, dil1, dil2, groups, upscale_conv, verbose, outW, outH)[0]
         # except Exception:
         #    print(traceback.format_exc())
@@ -112,11 +110,11 @@ class Down(torch.autograd.Function):
 
 class PerforatedConv2d(nn.Module):
     def __repr__(self):
-        return f"PerforatedConv2d({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride})"
+        return f"PerforatedConv2d({self.in_channels}, {self.out_channels}, {self.kernel_size}, perforation_mode={self.perf_stride})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None,
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=False):
+                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=True):
         self.original_conv_back = original_conv_back
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
@@ -220,13 +218,36 @@ class PerforatedConv2d(nn.Module):
         self.do_offsets = False
         self.jitter = False
         self.hard_limit = (self.kernel_size[0] == 1 and self.kernel_size[1] == 1)
+        self.inputshape = (1,1,0,0)
 
+    def _get_calculations(self):
+        # in_channels * out_channels * h * w * filter_size // stride1 // stride2
+        self.calculations = ((((self.in_channels * self.out_channels * self.inputshape[0] *
+                              (self.inputshape[-2] - self.kernel_size[0] // 2 * self.dilation[0] * 2 + self.padding[0] * 2) *
+                              (self.inputshape[-1] - self.kernel_size[1] // 2 * self.dilation[1] * 2 + self.padding[1] * 2) *
+                              self.kernel_size[0] * self.kernel_size[1]) // self.groups) //
+                             self.stride[0]) // self.stride[1] //
+                            self.perf_stride[0] // self.perf_stride[1])
+        self.calculations += ((self.out_channels * self.inputshape[0] * #+interpolacija
+                            (self.inputshape[-2] - self.kernel_size[0] // 2 * self.dilation[0] * 2 + self.padding[0] * 2) *
+                            (self.inputshape[-1] - self.kernel_size[1] // 2 * self.dilation[1] * 2 + self.padding[1] * 2))\
+                            //self.stride[0]//self.stride[1]//
+                            self.perf_stride[0]//self.perf_stride[1]
+                            * (self.perf_stride[0] *self.perf_stride[1] - 1))
+
+
+            #f"{self.in_channels}x" \
+            #f"{(self.inputshape[-2] - self.kernel_size[0] // 2 * 2 + self.padding[0] * 2)}x" \
+            #f"{(self.inputshape[-1] - self.kernel_size[1] // 2 * 2 + self.padding[1] * 2)}x" \
+            #f"{self.out_channels}x{self.kernel_size[0]}x{self.kernel_size[1]}//" \
+            #f"{self.stride[0]}//{self.stride[1]}//{self.perf_stride[0]}//{self.perf_stride[1]}"
     def set_perf(self, perf):
         self.perf_stride = perf
         self.recompute = True
 
     # noinspection PyTypeChecker
     def _do_recomputing(self, shape):
+        self.inputshape = shape
         tmp = 0
         self.out_x = int((shape[-2] - ((self.kernel_size[0] - 1) * self.dilation[0]) + 2 * self.padding[0] - 1)
                          // self.stride[0] + 1)
@@ -252,27 +273,17 @@ class PerforatedConv2d(nn.Module):
             tmp = int((shape[-1] - ((self.kernel_size[1] - 1) * self.dilation[1]) + 2 *
                        self.padding[1] - 1) // (self.stride[1] * tmp_stride2) + 1)
         self.perf_stride = (tmp_stride1, tmp_stride2)
-
-        self.mod1 = ((self.out_x - 1) % self.perf_stride[0]) + 1
-        self.mod2 = ((self.out_y - 1) % self.perf_stride[1]) + 1
         self.recompute = False
-        # in_channels * out_channels * h * w * filter_size // stride1 // stride2
-        self.calculations = ((self.in_channels * self.out_channels *
-                              (shape[-2] - self.kernel_size[0] // 2 * 2 + self.padding[0] * 2) *
-                              (shape[-1] - self.kernel_size[1] // 2 * 2 + self.padding[1] * 2) *
-                              self.kernel_size[0] * self.kernel_size[1]) //
-                             self.stride[0]) // self.stride[1] // \
-                            self.perf_stride[0] // self.perf_stride[1], \
-            f"{self.in_channels}x" \
-            f"{(shape[-2] - self.kernel_size[0] // 2 * 2 + self.padding[0] * 2)}x" \
-            f"{(shape[-1] - self.kernel_size[1] // 2 * 2 + self.padding[1] * 2)}x" \
-            f"{self.out_channels}x{self.kernel_size[0]}x{self.kernel_size[1]}//" \
-            f"{self.stride[0]}//{self.stride[1]}//{self.perf_stride[0]}//{self.perf_stride[1]}"
+
+
 
     def _initialize_weights(self):
-        nn.init.kaiming_normal_(self.weight, mode='fan_out', nonlinearity='relu')
-        if self.is_bias:
-            nn.init.constant_(self.bias, 0)
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, input):
         if input.device != self.weight.device:
@@ -304,11 +315,11 @@ class PerforatedConv2d(nn.Module):
 
 class DownActivUp(nn.Module):
     def __repr__(self):
-        return f"DownActivUp({self.in_channels}, {self.out_channels}, perforation_mode={self.perf_stride}, activ={self.activ.__repr__()})"
+        return f"DownActivUp({self.in_channels}, {self.out_channels}, {self.kernel_size}, perforation_mode={self.perf_stride}, activ={self.activ.__repr__()})"
     def __init__(self, in_channels, out_channels, kernel_size=(1, 1), stride=1, padding=(0, 0),
                  dilation=1, groups=1, bias=True, device=None, padding_mode=None, activation=torch.nn.Identity(),
                  perf_stride=None, upscale_conv=False, strided_backward=None, perforation_mode=None,
-                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=False, up=True, down=True):
+                 grad_conv=None, verbose=False, original_conv_back=False, init_weights=True, up=True, down=True):
         self.original_conv_back = original_conv_back
         super(DownActivUp, self).__init__()
         self.up = up
@@ -384,6 +395,19 @@ class DownActivUp(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(out_channels, in_channels // self.groups, self.kernel_size[0], self.kernel_size[1],
                         device=self.device))
+        if bias is None:
+            bias = False
+        if type(bias) == bool:
+            self.is_bias = bias
+            if bias:
+                self.bias = nn.Parameter(torch.empty(out_channels, device=self.device))
+            else:
+                self.bias = None
+        else:
+            self.bias = nn.Parameter(torch.clone(bias))
+            self.is_bias = True
+        if init_weights:
+            self._initialize_weights()
         self.is_bias = False
         self.bias = None
         if type(bias) == bool:
@@ -410,13 +434,29 @@ class DownActivUp(nn.Module):
         self.do_offsets = False
         self.jitter = False
         self.hard_limit = (self.kernel_size[0] == 1 and self.kernel_size[1] == 1)
+        self.inputshape = (1,1,0,0)
 
     def set_perf(self, perf):
         self.perf_stride = perf
         self.recompute = True
+    def _get_calculations(self):
+        # in_channels * out_channels * h * w * filter_size // stride1 // stride2
+        self.calculations = ((((self.in_channels * self.out_channels * self.inputshape[0] *
+                              (self.inputshape[-2] - self.kernel_size[0] // 2 * self.dilation[0] * 2 + self.padding[0] * 2) *
+                              (self.inputshape[-1] - self.kernel_size[1] // 2 * self.dilation[1] * 2 + self.padding[1] * 2) *
+                              self.kernel_size[0] * self.kernel_size[1]) // self.groups) //
+                             self.stride[0]) // self.stride[1] //
+                            self.perf_stride[0] // self.perf_stride[1])
+        self.calculations += ((self.out_channels * self.inputshape[0] * #+interpolacija
+                            (self.inputshape[-2] - self.kernel_size[0] // 2 * self.dilation[0] * 2 + self.padding[0] * 2) *
+                            (self.inputshape[-1] - self.kernel_size[1] // 2 * self.dilation[1] * 2 + self.padding[1] * 2))\
+                            //self.stride[0]//self.stride[1]//
+                            self.perf_stride[0]//self.perf_stride[1]
+                            * (self.perf_stride[0] *self.perf_stride[1] - 1))
 
     # noinspection PyTypeChecker
     def _do_recomputing(self, shape):
+        self.inputshape = shape
         tmp = 0
         self.out_x = int((shape[-2] - ((self.kernel_size[0] - 1) * self.dilation[0]) + 2 * self.padding[0] - 1)
                          // self.stride[0] + 1)
@@ -447,22 +487,15 @@ class DownActivUp(nn.Module):
         self.mod2 = ((self.out_y - 1) % self.perf_stride[1]) + 1
         self.recompute = False
         # in_channels * out_channels * h * w * filter_size // stride1 // stride2
-        self.calculations = ((self.in_channels * self.out_channels *
-                              (shape[-2] - self.kernel_size[0] // 2 * 2 + self.padding[0] * 2) *
-                              (shape[-1] - self.kernel_size[1] // 2 * 2 + self.padding[1] * 2) *
-                              self.kernel_size[0] * self.kernel_size[1]) //
-                             self.stride[0]) // self.stride[1] // \
-                            self.perf_stride[0] // self.perf_stride[1], \
-            f"{self.in_channels}x" \
-            f"{(shape[-2] - self.kernel_size[0] // 2 * 2 + self.padding[0] * 2)}x" \
-            f"{(shape[-1] - self.kernel_size[1] // 2 * 2 + self.padding[1] * 2)}x" \
-            f"{self.out_channels}x{self.kernel_size[0]}x{self.kernel_size[1]}//" \
-            f"{self.stride[0]}//{self.stride[1]}//{self.perf_stride[0]}//{self.perf_stride[1]}"
+
 
     def _initialize_weights(self):
-        nn.init.kaiming_normal_(self.weight, mode='fan_out', nonlinearity='relu')
-        if self.is_bias:
-            nn.init.constant_(self.bias, 0)
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, input):
         if input.device != self.weight.device:

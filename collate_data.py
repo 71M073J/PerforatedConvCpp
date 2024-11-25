@@ -82,7 +82,7 @@ for version in architectures:  # classigication, segmetnationg
                             os.mkdir(f"./{prefix}")
                         if not os.path.exists(f"./{prefix}/imgs"):
                             os.mkdir(f"./{prefix}/imgs")
-                        for extra in ["", "/cpu"]:
+                        for extra in ["", "/cpu_old"]:
                             with open(f"{prefix}{extra}/{run_name}_best.txt") as data:
                                 line = data.readline()
                                 pf = "Training perforation: " + str(perforation)
@@ -122,17 +122,61 @@ for version in architectures:  # classigication, segmetnationg
 
                                     #print(evaluation)
                             #quit()
-generateResults = True
+generateResults = False
 if generateResults:
     print(output)
     with open("results.txt", "w") as f:
         print(json.dumps(output, indent=4, sort_keys=True), file=f)
-print("skipping images...")
-quit()
+
+make_speedup_graphs = True
+if make_speedup_graphs:
+    loc="gpu"
+    speeds = []
+    for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
+        for dataset in ["cifar", "ucihar", "agri"]:
+            if "unet" in network and dataset != "agri": continue
+            if "unet" not in network and dataset == "agri": continue
+            for typ in ["perf", "dau"]:
+                typ = type_convert(typ)
+                for img in [32, 128, 256, 512]:
+                    if (img > 32 and "unet" not in network) or (img == 32 and "unet" in network):continue
+                    name = f"{network}_{dataset}_{img}_{typ}"
+
+                    locations = []
+                    cnt = -1
+                    accs = np.zeros((4,5))
+                    names = np.ndarray(shape=(5,5), dtype=object)
+                    for indd, pf in enumerate((2, 3, "random", "2by2_equivalent")):#training perforation
+                        pf2 = "Training perforation: " + str(pf)
+                        speeds.append((name+f"_{pf}", output[network][dataset][typ][str(img)][pf2]["Training time CPU improvement"]))
+
+print(speeds)
+images = False
+if not images:
+    print("skipping images...")
+    quit()
 
 import matplotlib.pyplot as plt
 #output[modelname][dataset][type_convert(perf_type)][img][pf][eval_mode] = acc
 #output[modelname][dataset][type_convert(perf_type)][img]["Training time"] = evaluation.split(":")[1][:-2]
+
+def readable(n):
+    if n == "resnet18":
+        return "Resnet 18"
+    if n == "mobnetv2":
+        return "Mobilenet V2"
+    if n == "mobnetv3s":
+        return "Mobilenet V3-small"
+    if n == "unet_agri":
+        return "Agriadapt Unet"
+    if n == "unet_custom":
+        return "Optimised Unet"
+    if n == "cifar":
+        return "CIFAR10"
+    if n == "ucihar":
+        return "UCI-HAR"
+    if n == "agri":
+        return "Agri-Adapt"
 
 for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
     for dataset in ["cifar", "ucihar", "agri"]:
@@ -186,6 +230,7 @@ for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]
                     os.makedirs(f"./{prefix}/graphs")
 
                 plt.legend(loc="lower right")
+                plt.title(f"Perforation of {readable(network)} with {readable(dataset)} dataset")
                 #plt.legend(loc="best")
                 plt.xlabel("Training perforation")
                 plt.tight_layout()

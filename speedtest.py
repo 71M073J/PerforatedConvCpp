@@ -1,7 +1,7 @@
 import os
 
 import torch
-from conv import PerforatedConv2d as Conv
+from Architectures.PerforatedConv2d import PerforatedConv2d as Conv
 import time
 import numpy as np
 
@@ -25,12 +25,12 @@ for device in ["cuda", "cpu"]:
                     if bs * channels * imgsz * imgsz > 1e7:
                         continue
                     device = "cpu"
-                    device = "cuda"
+                    #device = "cuda"
                     print(device)
                     stride = 2
-                    bs = 64
+                    bs = 4
                     channels = 256
-                    imgsz = 32
+                    imgsz = 128
                     for back in [True, False]:
                         cnt += 1
                         #continue
@@ -41,9 +41,10 @@ for device in ["cuda", "cpu"]:
                         c33 = c1(channels, channels, ks, perf_stride=(stride, stride), strided_backward=back).to(device)
 
                         data = torch.rand((bs, channels, imgsz, imgsz), device=device)
-                        for i in range(100):
-                            c22(data)
-                            c33(data)
+                        if device != "cpu":
+                            for i in range(100):
+                                c22(data)
+                                c33(data)
 
                         times2 = []
                         times3 = []

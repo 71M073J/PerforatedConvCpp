@@ -1,42 +1,28 @@
 import os.path
 import random
-import time
 import copy
-from typing import Union
 import time
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.nn as nn
 import torchvision.models.resnet
-from torch import optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import BinaryJaccardIndex, BinaryPrecision, BinaryRecall, BinaryF1Score
-# from torchvision import transforms
 from torchvision.models import resnet18, mobilenet_v2, mobilenet_v3_small
 import torchvision.transforms.v2 as transforms
 from agriadapt.segmentation.data.data import ImageDataset as AgriDataset
-from torch.distributions import Categorical
-from contextlib import ExitStack
 from torchinfo import summary
 try:
     from pytorch_cinic.dataset import CINIC10
 except:
     noCinic = True
 from ucihar import UciHAR
-# from Architectures.PerforatedConv2d import PerforatedConv2d
-# from Architectures.mobilenetv2 import MobileNetV2
 from perforateCustomNet import perforate_net_perfconv as perfPerf
 from perforateCustomNet import perforate_net_downActivUp as perfDAU
-# from Architectures.mobilenetv3 import mobilenet_v3_large, mobilenet_v3_small, MobileNetV3
-# from Architectures.resnet import resnet152, resnet18, ResNet
 from Architectures.UnetCustom import UNet as UNetCustom
 from agriadapt.dl_scripts.UNet import UNet
 from torch import argmax, where, cat, stack
-#import agriadapt.segmentation.settings as settings
 import agriadapt.segmentation.data.data as dd
 
 metrics = {
@@ -314,7 +300,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
         pred = net(batch)
         loss = loss_fn(pred, classes)
         if torch.isnan(loss):
-            print("NaN loss reached, quitting...")
+            print(f"NaN loss reached in batch {i}, quitting...")
             quit()
         loss.backward()
         if grad_ep:
@@ -388,7 +374,7 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
                 acc = (softm.argmax(dim=1) == classes)
                 valid_accs.append(torch.sum(acc).detach().cpu() / batch_size)
             if torch.isnan(valid_losses[-1]):
-                print("NaN loss reached, quitting...")
+                print(f"NaN loss reached in batch {i}, quitting...")
                 quit()
         if reporting:
             if file is not None:
@@ -405,7 +391,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
               summarise=True, pretrained=True, dataset="idk", prefix="", do_grad=False, savemodels=False,
-              device="cpu", batch_size=64, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
+              device="cpu", batch_size=2, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
     if type(perforation_mode) not in [tuple, list]:
         perforation_mode = (perforation_mode, perforation_mode)
     if type(perforation_mode[0]) == str:
@@ -533,14 +519,13 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     architectures = [
-
+        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"],
+         [32]],
         [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]],
-        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"], [32]],
+
         # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
 
     ]
-
-    eval_modes = [None, (1, 1), (2, 2), (3, 3)]
 
     for version in architectures:  # classigication, segmetnationg
         for dataset in version[1]:
@@ -559,7 +544,7 @@ def runAllTests():
             else:
                 max_epochs = 200
                 batch_size = 32
-                lr = 0.01
+                lr = 0.1
 
             for model, modelname in version[0]:
                 for img in version[2]:
@@ -584,7 +569,7 @@ def runAllTests():
                             else:
                                 alreadyNoPerf = True
 
-                        for perf_type in ["perf", "dau"]:
+                        for perf_type in ["perf", "dau",]:
                             if perforation is None:
                                 if perf_type == "dau":
                                     continue
@@ -592,6 +577,7 @@ def runAllTests():
                                     perf_type = None
 
                             prefix = "allTests_last"
+                            prefix = "testFixPerf"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
@@ -639,12 +625,9 @@ def runAllTests():
                                 net._reset()
                             net.to(device)
 
-                            #TODO make function to eval SPEED, MEMORY, FLOPS of each network, that is called if
-                            # "_best" file already exists so we can do stuff on already trained tests
-
-                            #TODO: separate scripts for making images and scripts for training - why tf is one dependent on the other
 
 
+                            #TODO check why agriadapt had no gradient graphs
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
@@ -662,7 +645,7 @@ def runAllTests():
                                 pref = prefix + "/cpu"
                                 if not os.path.exists(f"./{pref}"):
                                     os.makedirs(f"./{pref}")
-
+                                batch_size = 2
                                 max_epochs = 10
                                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
                                 device = "cpu"
