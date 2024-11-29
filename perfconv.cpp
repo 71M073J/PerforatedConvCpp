@@ -346,7 +346,31 @@ std::vector<torch::Tensor> conv_forward2(torch::Tensor input,
     double invstrideH = 1.0 / dHp;
     double invstrideW = 1.0 / dWp;
     //std::cerr << "before interp" << std::endl;
-    if (dHp > 1){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
+    if (dHp == 2){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
+      out.index_put_({
+            torch::indexing::Slice(),
+            torch::indexing::Slice(),
+            torch::indexing::Slice(0, torch::indexing::None, dWp),
+            torch::indexing::Slice(1, -(dHp-1), dHp)
+            },
+            (
+                output.index({
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(0, -1, 1)}) +
+                output.index({
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(1, torch::indexing::None, 1)})
+             )* 0.5);
+
+    }
+
+    //std::cerr << "mid interp" << std::endl;
+
+    else if (dHp > 2){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
         for(int64_t i = 1; i < dHp; i++){
 
 
@@ -386,9 +410,23 @@ std::vector<torch::Tensor> conv_forward2(torch::Tensor input,
                     lastH}) * (1 - i*invstrideH));
     }
     //std::cerr << "wtf" << std::endl;
-
+    if (dWp == 2){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
+        out.index_put_(
+            {torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(1, -1, 2),
+             torch::indexing::Slice()}
+        , (out.index({torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(0, -2, 2),
+             torch::indexing::Slice()}) +
+        out.index({torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(2, torch::indexing::None, 2),
+             torch::indexing::Slice()})) *0.5);
+    }
     //std::cerr << "mid interp" << std::endl;
-    if (dWp > 1){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
+    else if (dWp > 2){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
         for(int64_t i = 1; i < dWp; i++){
 
 
@@ -401,11 +439,11 @@ std::vector<torch::Tensor> conv_forward2(torch::Tensor input,
                 out.index({torch::indexing::Slice(),
                      torch::indexing::Slice(),
                      torch::indexing::Slice(0, -dWp, dWp),
-                     torch::indexing::Slice()}) * (i * invstrideW) +
+                     torch::indexing::Slice()}) * (1 - (i * invstrideW)) +
                 out.index({torch::indexing::Slice(),
                      torch::indexing::Slice(),
                      torch::indexing::Slice(dWp, torch::indexing::None, dWp),
-                     torch::indexing::Slice()}) * (1 - (i * invstrideW))
+                     torch::indexing::Slice()}) * ((i * invstrideW))
              );
         }
     }
@@ -421,7 +459,7 @@ std::vector<torch::Tensor> conv_forward2(torch::Tensor input,
                     torch::indexing::Slice(),
                     torch::indexing::Slice(),
                     lastW,
-                    torch::indexing::Slice()}) * (1 - i*invstrideH));
+                    torch::indexing::Slice()}) * (1 - i*invstrideW));
     }
     //std::cerr << "wtf2" << std::endl;
 
@@ -960,7 +998,31 @@ std::vector<torch::Tensor> upscale2(torch::Tensor output,
     double invstrideH = 1.0 / dHp;
     double invstrideW = 1.0 / dWp;
     //std::cerr << "before interp" << std::endl;
-    if (dHp > 1){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
+    if (dHp == 2){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
+      out.index_put_({
+            torch::indexing::Slice(),
+            torch::indexing::Slice(),
+            torch::indexing::Slice(0, torch::indexing::None, dWp),
+            torch::indexing::Slice(1, -(dHp-1), dHp)
+            },
+            (
+                output.index({
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(0, -1, 1)}) +
+                output.index({
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(),
+                    torch::indexing::Slice(1, torch::indexing::None, 1)})
+             )* 0.5);
+
+    }
+
+    //std::cerr << "mid interp" << std::endl;
+
+    else if (dHp > 2){ //out[:, :, ::dWp, 1:-(dHp-1):dHp] = (output[: ,:, :, :-1:] + output[:,:,:,1::1])*0.5
         for(int64_t i = 1; i < dHp; i++){
 
 
@@ -1000,9 +1062,23 @@ std::vector<torch::Tensor> upscale2(torch::Tensor output,
                     lastH}) * (1 - i*invstrideH));
     }
     //std::cerr << "wtf" << std::endl;
-
+    if (dWp == 2){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
+        out.index_put_(
+            {torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(1, -1, 2),
+             torch::indexing::Slice()}
+        , (out.index({torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(0, -2, 2),
+             torch::indexing::Slice()}) +
+        out.index({torch::indexing::Slice(),
+             torch::indexing::Slice(),
+             torch::indexing::Slice(2, torch::indexing::None, 2),
+             torch::indexing::Slice()})) *0.5);
+    }
     //std::cerr << "mid interp" << std::endl;
-    if (dWp > 1){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
+    else if (dWp > 2){//out[:, :, 1:-1:2,::dWp, :] = (output[: ,:, :-2:2, :] + output[:,:,2::2,:])*0.5
         for(int64_t i = 1; i < dWp; i++){
 
 
@@ -1015,11 +1091,11 @@ std::vector<torch::Tensor> upscale2(torch::Tensor output,
                 out.index({torch::indexing::Slice(),
                      torch::indexing::Slice(),
                      torch::indexing::Slice(0, -dWp, dWp),
-                     torch::indexing::Slice()}) * (i * invstrideW) +
+                     torch::indexing::Slice()}) * (1 - (i * invstrideW)) +
                 out.index({torch::indexing::Slice(),
                      torch::indexing::Slice(),
                      torch::indexing::Slice(dWp, torch::indexing::None, dWp),
-                     torch::indexing::Slice()}) * (1 - (i * invstrideW))
+                     torch::indexing::Slice()}) * ((i * invstrideW))
              );
         }
     }
@@ -1035,9 +1111,8 @@ std::vector<torch::Tensor> upscale2(torch::Tensor output,
                     torch::indexing::Slice(),
                     torch::indexing::Slice(),
                     lastW,
-                    torch::indexing::Slice()}) * (1 - i*invstrideH));
+                    torch::indexing::Slice()}) * (1 - i*invstrideW));
     }
-
     return {out};
 }
 
