@@ -276,6 +276,7 @@ def get_first_layer_weights(net):
             return sub.weight.grad.detach().clone().cpu()
         elif len(list(sub.children())) != 0:
             return get_first_layer_weights(sub)
+    raise ModuleNotFoundError("Weight not found")
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
           perforation_mode, n_conv, grad_ep):
     net.train()
@@ -519,10 +520,10 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     architectures = [
+
+        [[(UNetCustom, "unet_custom"),(UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],
         [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"],
          [32]],
-        [[(UNet, "unet_agri"), (UNetCustom, "unet_custom")], ["agri"], [128, 256, 512]],
-
         # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
 
     ]
@@ -577,7 +578,6 @@ def runAllTests():
                                     perf_type = None
 
                             prefix = "allTests_last"
-                            prefix = "testFixPerf"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
