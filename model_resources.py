@@ -39,20 +39,26 @@ def getTotalNumCalc(net, perf_compare=(2,2)):
            f"(Counting only Conv layers)"
 
 
-def get_multadds(net, mode="dau"):
+def get_multadds(net, mode="dau", perf_mode=(1,1), verbose=False):
     if mode == "dau":
         classname = "DownActivUp"
     elif mode == "perf":
         classname = "PerforatedConv2d"
     else:
-        classname = ""
+        classname = "Conv2d"
     nams = names(net)
+    if verbose:
+        summary(net, input_size=ins, mode="train", depth=10,
+                col_names=["input_size", "output_size", "mult_adds", "kernel_size", "num_params"], verbose=2)
     output = summary(net, input_size=ins, mode="train", depth=10,
                      col_names=["input_size", "output_size", "mult_adds", "kernel_size", "num_params"], verbose=0)
     ind = 0
     sum_mads = 0
+    factorPerf = 1/(perf_mode[0]*perf_mode[1])
     for i, line in enumerate(str(output).split("\n")):
         if line.split("─")[-1].startswith(classname):
+            if verbose:
+                print("adding", line.split("─"))
             things = line.replace(", ", ",").split()
             if len(things) < 5:continue
             if line.startswith("L"): continue
@@ -65,14 +71,25 @@ def get_multadds(net, mode="dau"):
             #print(things, nams)
             in_s = json.loads(things[-5])
             out_s = json.loads(things[-4])
+            standin = None
+            tempout = None
             try:
                 original = nams[ind]
                 ind += 1
+                try:
+                    stride = (original.stride[0] * original.perf_stride[0], original.stride[1] * original.perf_stride[1])
+                    is_bias = original.is_bias
+                except:
+                    stride = original.stride
+                    is_bias = True
+
                 standin = torch.nn.Conv2d(original.in_channels, original.out_channels, original.kernel_size,
-                                          (original.stride[0]*original.perf_stride[0],original.stride[1]*original.perf_stride[1])
-                                          , original.padding, original.dilation, original.groups,
-                                          original.bias, device=original.weight.device)
+                                         stride, original.padding, original.dilation, original.groups,
+                                          is_bias, device=original.weight.device)
                 tempout = summary(standin, input_size=in_s, mode="train", col_names=["mult_adds"], verbose=0)
+                if verbose:
+                    print(standin)
+                    print(tempout)
 
                 n_multadds = int(str(tempout).split("\n")[3].split()[-1].replace(",", ""))
             except:
@@ -82,30 +99,18 @@ def get_multadds(net, mode="dau"):
                     try:
                         n_multadds = int(
                             [x for x in str(output).split("\n")[i].split(" ") if len(x) > 0][-4].replace(",", ""))
-                    except:continue
+                    except:
+                        if verbose:
+                            print("line failed", line, "input size:", things[-5])
 
+                        raise ValueError(line, things)
             #now for upscale
-            if mode=="dau":
-                sp = [x for x in line.split(" ") if len(x) > 0]
-                try:
-                    n = int(sp[-3].replace(",", ""))
-                    n_multadds -= n
-                    n_multadds += n / (original.perf_stride[0] * original.perf_stride[1])
-                except:
-                    for j in range(len([x for x in str(output).split("\n")[i+2:i+4] if x.startswith("│    " * (len([x for x in line.split(" ") if "│" in x]) + 1))])):
-                        l = str(output).split("\n")[i + 2 + j]
-                        sp = [x for x in l.split(" ") if len(x) > 0]
-                        try:
-                            n = int(sp[-3].replace(",", ""))
-                            n_multadds -= n
-                            n_multadds += n / (original.perf_stride[0] * original.perf_stride[1])
-                        except:pass
-                # n multadds from following layers that are also reduced in dau
-                factor = original.perf_stride[0] < 3 and original.perf_stride[1] < 3 #if we do "optimised" interpolation
-                if factor:
-                    n_multadds += (out_s[0] * out_s[1] * out_s[2] * out_s[3])
-                else:
-                    n_multadds *= 2
+            if mode=="dau" or mode == "perf":
+                n_multadds += (1-factorPerf) * out_s[0]*out_s[1]*out_s[2]*out_s[3] * 2 #interpolation: 2x output size for all except corect nums
+
+                if mode == "dau":
+                    # n multadds from following layers that are also reduced in dau - we estimate 1 layer reduced
+                    n_multadds -= (out_s[0] * out_s[1] * out_s[2] * out_s[3]) * (1-factorPerf)
 
 
             sum_mads += n_multadds
@@ -127,12 +132,18 @@ def get_multadds(net, mode="dau"):
             try:
                 n = int(sp[-3].replace(",", ""))
                 sum_mads += n
-            except:pass
+            except:
+                try:
+                    sum_mads += int(sp[-3].replace(",", ""))
+                except:
+                    try:
+                        sum_mads += int(sp[-4].replace(",", ""))
+                    except:
+                        pass
     return int(sum_mads)
 
 if __name__ == "__main__":
-    ins = (32, 3, 32, 32)
-    net = torchvision.models.resnet18(num_classes=10)
+    ins = (2, 3, 128, 128)
 
 
     def names(part):
@@ -146,10 +157,62 @@ if __name__ == "__main__":
                 convs.append(names(submodule))
         return flatten_list(convs)
 
+    from agriadapt.segmentation.models.UNet import UNet as Agri
+    from Architectures.UnetCustom import UNet as Custom
 
-    DAU(net, in_size=ins, verbose=False)
-    #perf(net, in_size=ins)
-    print(get_multadds(net, mode="dau"))
+    #net = Custom(2)
+    #DAU(net, in_size=ins)
+    #print(get_multadds(net, mode="dau", perf_mode=(2,2), verbose=True))
+    #quit()
+    with open("UnetResults.txt", "w") as file:
+        for netF in [Custom, Agri]:
+            data = {}
+            for pf in [DAU, perf]:
+                mode = "perf" if pf == perf else "dau"
+                print(netF, pf)
+                net = netF(2)
+                baseline = 0
+                baseline = get_multadds(net, mode="none", verbose=False)
+                print(baseline)
+                data["None" + mode] = 100
+
+                #quit()
+                pf(net, in_size=ins)
+                #DAU(net, in_size=ins)
+                #print(get_multadds(net, mode="dau", perf_mode=(2,2), verbose=True))
+                #quit()
+                MAs = {}
+                for i, j in [(3,3),(2,3),(3,2),(3,1),(1,3),(2,2),(2,1),(1,2),(1,1)]:
+                    net._set_perforation((i, j))._reset()
+                    MAs[(i,j)] = get_multadds(net, mode=mode, perf_mode=(i, j))
+                #print(baseline)
+                #print(MAs)
+                coeffs = [0, 0.20029760897159576, 0.32178425043821335, 0.44327089190483093,0.5378847792744637, 0.6407210007309914, 0.7435572221875191, 0.8306062072515488, 0.9176551923155785, 1]
+                ratios = np.diff(coeffs)
+                data["(2, 2)_" + mode] = int(np.round((baseline/MAs[(2,2)])*100))
+                data["(3, 3)_" + mode] = int(np.round((baseline/MAs[(3,3)])*100))
+                data["2 by 2 equivalent_" + mode] = int(np.round((baseline/sum([MAs[x] * y for x, y in zip([(3,3),(2,3),(3,2),(3,1),(1,3),(2,2),(2,1),(1,2),(1,1)], ratios)]))*100))
+                data["uniform random_" + mode] = int(np.round((baseline/(sum([MAs[x] for x in MAs])/len(MAs)))*100))
+            print("\n".join([str((x, data[x])) for x in sorted([x for x in data])]))
+    #if rn < 0.20029760897159576:
+    #    perfs[i] = 3, 3
+    #elif rn < 0.32178425043821335:
+    #    perfs[i] = 2, 3
+    #elif rn < 0.44327089190483093:
+    #    perfs[i] = 3, 2
+    ## elif rn < 0.5378847792744637: #ultra bad memory layout, skipping - 3,1 is the same time complexity
+    ##    perfs[i] = 3,1
+    #elif rn < 0.6407210007309914:
+    #    perfs[i] = 1, 3
+    #elif rn < 0.7435572221875191:
+    #    perfs[i] = 2, 2
+    #elif rn < 0.8306062072515488:
+    #    perfs[i] = 1, 2
+    #elif rn < 0.9176551923155785:
+    #    perfs[i] = 2, 1
+    #else:
+    #    perfs[i] = 1, 1
+    #print(get_multadds(net, mode="dau"))
     #summary(net, input_size=ins, mode="train", depth=10,
     #                 col_names=["input_size", "output_size", "mult_adds", "kernel_size", "num_params"])
     #print(output)
