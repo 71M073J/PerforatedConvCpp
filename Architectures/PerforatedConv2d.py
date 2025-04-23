@@ -119,7 +119,7 @@ class PerforatedConv2d(nn.Module):
         super(PerforatedConv2d, self).__init__()
         self.verbose = verbose
         #TODO
-        strided_backward = True
+        #strided_backward = True
 
 
         if strided_backward is None:

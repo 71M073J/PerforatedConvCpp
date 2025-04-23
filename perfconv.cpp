@@ -31,6 +31,18 @@ torch::Tensor get_lin_kernel(int64_t w, int64_t h, bool normalised, at::TensorOp
     }
 }
 
+/*torch::Tensor get_lin_kernel_nd(torch::IntArrayRef dimensions, bool normalised, at::TensorOptions options){
+    torch::Tensor i = kern1d(dimensions, options).index({torch::indexing::Slice(0, torch::indexing::None, 1), torch::indexing::None})
+    //els = list of kernels given dimensions
+    torch::Tensor out = torch::einsum('i,j,k->ijk', els);
+
+    if (normalised){
+        return k / k.sum();
+    }else{
+        return k;
+    }
+}*/
+
 std::vector<torch::Tensor> conv_forward(torch::Tensor input,
                                    torch::Tensor weights,
                                    const ::std::optional<at::Tensor> bias,
@@ -676,7 +688,7 @@ std::vector<torch::Tensor> conv_backward(torch::Tensor input,
                                     int64_t groups, bool stridedBackward, bool verbose, bool originalConvBack, bool noDownscale) {
     int64_t nOutputPlane = gradOutput.size(1);
     std::array<bool, 3> output_mask = {true, true, true};
-    if(stridedBackward){
+    if(stridedBackward && (kW > 1 || kH > 1)){
         //std::cerr << dW << " dW "<< dW * dWp << " dW*dWp "<< dW/dWp << " dW/dWp \n";
         //std::cerr << dH << " dH "<< dH * dHp << " dH*dHp "<< dH/dHp << " dH/dHp \n";
         int64_t strideb1 = dW * dWp;

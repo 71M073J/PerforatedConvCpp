@@ -521,11 +521,11 @@ def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     architectures = [
 
-        [[(UNetCustom, "unet_custom"),(UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],
-        [[(resnet18, "resnet18"), (mobilenet_v2, "mobnetv2"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"],
+        
+        [[(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"],
          [32]],
         # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
-
+        [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],
     ]
 
     for version in architectures:  # classigication, segmetnationg
@@ -577,7 +577,12 @@ def runAllTests():
                                 else:
                                     perf_type = None
 
-                            prefix = "allTests_last"
+                            print("DOING PERF TYPE OVERRIDE; REMOVE THIS")
+                            perf_type = "dau"
+                            perforation = 2
+
+
+                            prefix = "allTests_lastlast"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
@@ -626,8 +631,6 @@ def runAllTests():
                             net.to(device)
 
 
-
-                            #TODO check why agriadapt had no gradient graphs
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
@@ -640,18 +643,19 @@ def runAllTests():
                                 os.mkdir(f"./{prefix}/imgs")
                             print("starting run:", curr_file)
                             cpuRun = False
+                            overrideExisting = False
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt") or cpuRun:
                                 print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
                                 pref = prefix + "/cpu"
                                 if not os.path.exists(f"./{pref}"):
                                     os.makedirs(f"./{pref}")
                                 batch_size = 2
-                                max_epochs = 10
+                                max_epochs = 2
                                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
                                 device = "cpu"
                                 net.to(device)
                                 loss_fn.to(device)
-                                if os.path.exists(f"./{pref}/{curr_file}_best.txt") and not cpuRun:
+                                if os.path.exists(f"./{pref}/{curr_file}_best.txt") and not overrideExisting:
                                     print("cpu speedtest exists, next")
                                     continue
                                 with open(f"./{pref}/{curr_file}.txt", "w") as f:

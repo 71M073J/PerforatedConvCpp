@@ -25,7 +25,9 @@ def type_convert(typ):
 
 output = {}
 
-prefix = "allTests_last"
+prefix = "allTests_last4"
+prefix = "allTests_last4_"
+#prefix = "allTests_last"
 for version in architectures:  # classigication, segmetnationg
     for dataset in version[1]:
         if dataset == "agri":
@@ -65,6 +67,8 @@ for version in architectures:  # classigication, segmetnationg
                             alreadyNoPerf = True
 
                     for perf_type in ["perf", "dau"]:
+                        if modelname.startswith("mobnet") and perf_type == "dau":
+                            continue
                         if perforation is None:
                             if perf_type == "dau":
                                 continue
@@ -82,8 +86,14 @@ for version in architectures:  # classigication, segmetnationg
                             os.mkdir(f"./{prefix}")
                         if not os.path.exists(f"./{prefix}/imgs"):
                             os.mkdir(f"./{prefix}/imgs")
-                        for extra in ["", "/cpu_old"]:
-                            with open(f"{prefix}{extra}/{run_name}_best.txt") as data:
+                        extras = [""]
+                        try:
+                            open(f"{prefix}/cpu_old/{run_name}_best.txt", "r")
+                            extras.append("/cpu_old")
+                        except: pass
+                        for extra in extras:
+
+                            with open(f"{prefix}{extra}/{run_name}_best.txt", "r") as data:
                                 line = data.readline()
                                 pf = "Training perforation: " + str(perforation)
                                 for evaluation in replace_all(line, {"[":"", "]":"", "Validation ":"", "((":"(", "))":")"}).split("', '"):
@@ -122,16 +132,17 @@ for version in architectures:  # classigication, segmetnationg
 
                                     #print(evaluation)
                             #quit()
-generateResults = False
+generateResults = True
 if generateResults:
     print(output)
-    with open("results.txt", "w") as f:
+    with open(f"results{prefix}.txt", "w") as f:
         print(json.dumps(output, indent=4, sort_keys=True), file=f)
 
 make_speedup_graphs = True
 if make_speedup_graphs:
     loc="gpu"
     speeds = []
+    speeds2 = []
     for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
         for dataset in ["cifar", "ucihar", "agri"]:
             if "unet" in network and dataset != "agri": continue
@@ -148,17 +159,66 @@ if make_speedup_graphs:
                     names = np.ndarray(shape=(5,5), dtype=object)
                     for indd, pf in enumerate((2, 3, "random", "2by2_equivalent")):#training perforation
                         pf2 = "Training perforation: " + str(pf)
-                        speeds.append((name+f"_{pf}", output[network][dataset][typ][str(img)][pf2]["Training time CPU improvement"]))
+                        for ev in [1,2,3,4]:
+                            eval_mode = f"Evaluation perforation: {ev}, {ev}"
+                            if ev == 4 and dataset != "agri":continue
+                            try:
+                                if eval_mode in output[network][dataset][typ][str(img)][pf2]:
+                                    speeds.append((name+f"_{pf}", output[network][dataset][typ][str(img)][pf2]["Training time improvement"],
+                                                   float(output[network][dataset][typ][str(img)][pf2][eval_mode][:-1])/float(output[network][dataset][type_convert(None)][str(img)]['Training perforation: None']["Evaluation perforation: 1, 1"][:-1]),
+                                                  pf))
+                            except:
+                                print("skipping", network, "on", typ)
+                            try:
+                                if eval_mode in output[network][dataset][typ][str(img)][pf2]:
+                                    speeds2.append((name+f"_{pf}", output[network][dataset][typ][str(img)][pf2]["Training time CPU improvement"],
+                                                   float(output[network][dataset][typ][str(img)][pf2][eval_mode][:-1])/float(output[network][dataset][type_convert(None)][str(img)]['Training perforation: None']["Evaluation perforation: 1, 1"][:-1]),
+                                                  pf))
+                            except:
+                                print("skipping", network, "on CPU", typ)
+    print(speeds)
+    import matplotlib.pyplot as plt
+    for s in [speeds, speeds2]:
+        fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+        maps = {2:1, 3:1.25, "random":1.5, "2by2_equivalent":2}
+        for (name, speedup, acc, ev) in s:
+            for n in [("resnet", ((1, 0, 0),), "resnet18"), ("mobnetv2", ((0, 0, 1),), "mobilenet v2"), ("mobnetv3", ((0, 0.6, 0),), "mobilenet v3-small"),
+                      ("unet_agri", ((0, 0.5, 0),), "Agri-adapt UNet"), ("unet_custom", ((1, 0.5, 0),), "Our UNet")]:
+                for i, d in enumerate(["cifar", "ucihar", "agri"]):
+                    if name.startswith(n[0]) and ((d == "agri" and d == name.split("_")[2]) or (d != "agri" and d == name.split("_")[1])):
+                        #col = ((n[1][0][0]/maps[ev], n[1][0][1]/maps[ev], n[1][0][2]/maps[ev]),)
+                        # + ", Perf: " + (str(ev) + "x" + str(ev) if type(ev) == int else ev)
+                        ax[i].scatter(float(speedup[:-1]), (acc - 1)*100, c=n[1], label=n[2], alpha=0.75/(maps[ev]*0.8))
+        for i, d in enumerate(["cifar", "ucihar", "agri"]):
+            handles, labels = ax[i].get_legend_handles_labels()
+            hand, labs = [], []
+            for h, l in zip(handles, labels):
+                if l not in labs:
+                    hand.append(h)
+                    labs.append(l)
+            ax[i].legend(hand, labs)
+            ax[i].grid()
+            ax[i].set_ylim(-80, 5)
+            ax[i].set_xlabel("Speedup (%)")
+            ax[i].set_title("Dataset:" + (d.upper() if d != "agri" else "Agri-adapt"))
 
-print(speeds)
+        ax[0].set_ylabel("Accuracy reduction (%)")
+        fig.suptitle("Accuracy-speedup tradeoff, " + ("GPU" if s == speeds else "CPU"), fontsize=14)
+        plt.tight_layout()
+        plt.savefig(f"speedup_acc_tradeoff{'_CPU' if s == speeds2 else ''}.png")
+        plt.show()
+
+
+
 images = False
 if not images:
     print("skipping images...")
     quit()
 
-import matplotlib.pyplot as plt
 #output[modelname][dataset][type_convert(perf_type)][img][pf][eval_mode] = acc
 #output[modelname][dataset][type_convert(perf_type)][img]["Training time"] = evaluation.split(":")[1][:-2]
+import matplotlib.pyplot as plt
+
 
 def readable(n):
     if n == "resnet18":
@@ -177,13 +237,17 @@ def readable(n):
         return "UCI-HAR"
     if n == "agri":
         return "Agri-Adapt"
+    if n == "dau":
+        return "moving"
+    if n == "perf":
+        return "standard"
 
 for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
     for dataset in ["cifar", "ucihar", "agri"]:
         if "unet" in network and dataset != "agri": continue
         if "unet" not in network and dataset == "agri": continue
-        for typ in ["perf", "dau"]:
-            typ = type_convert(typ)
+        for typa in ["perf", "dau"]:
+            typ = type_convert(typa)
             for img in [32, 128, 256, 512]:
                 if (img > 32 and "unet" not in network) or (img == 32 and "unet" in network):continue
                 name = f"{network}_{dataset}_{img}_{typ}"
@@ -230,7 +294,7 @@ for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]
                     os.makedirs(f"./{prefix}/graphs")
 
                 plt.legend(loc="lower right")
-                plt.title(f"Perforation of {readable(network)} with {readable(dataset)} dataset")
+                plt.title(f"Perforation of {readable(network)} with {readable(dataset)} dataset\n{readable(typa)} perforation")
                 #plt.legend(loc="best")
                 plt.xlabel("Training perforation")
                 plt.tight_layout()

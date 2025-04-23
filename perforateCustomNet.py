@@ -46,6 +46,7 @@ def replace_module_perfconv(net, from_class, perforation_mode, pretrained):
                     new.weight = torch.nn.Parameter(torch.clone(original.weight))
                     if original.bias is not None or (type(original.bias) == bool and original.bias):
                         new.bias = torch.nn.Parameter(torch.clone(original.bias))
+            del original
             setattr(net, name, new)
         elif len(list(submodule.named_children())) != 0:
             replace_module_perfconv(submodule, from_class, perforation_mode=perforation_mode, pretrained=pretrained)
@@ -222,11 +223,14 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                                   original.bias, original.weight.device, perforation_mode=perforation_mode,
                                   activation=torch.nn.Sequential(*newActivs))
 
+
             else:
                 ...#output layer should? be non-perforated maybe
                 new = PerforatedConv2d(original.in_channels, original.out_channels, original.kernel_size,
                                        original.stride, original.padding, original.dilation, original.groups,
                                        original.bias, original.weight.device, perforation_mode=perforation_mode)
+
+
             if verbose:
                 print("New layer:", new, "for name", name, "on layer", net._get_name())
             if pretrained:
@@ -239,6 +243,7 @@ def replace_module_downActivUp(net, perforation_mode, pretrained=False, from_cla
                             new.bias = torch.nn.Parameter(torch.clone(original.bias))
                     elif hasattr(original.bias, "shape"):
                         new.bias = torch.nn.Parameter(torch.clone(original.bias))
+            del original
             if type(net) != torch.nn.Sequential:
                 setattr(net, name, new)
             else:

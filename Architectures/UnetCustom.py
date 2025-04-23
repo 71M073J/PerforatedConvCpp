@@ -11,10 +11,8 @@ class UNet(nn.Module):
         self.ups = self.upscale_block(128, 64)
         self.upconv2_ex = self.expand_block(192, 64, 3, 2)
         self.upconv2 = self.contract_block2(128, 64, 3)
-
         self.upconv1 = self.expand_block(64, 64, kernel_size=3, padding=1)
         self.outconv = nn.Conv2d(64+3, out_channels, kernel_size=1)
-
     def forward(self, X):
         x_ = X
         x1 = self.conv1(X)
