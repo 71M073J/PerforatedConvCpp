@@ -315,22 +315,27 @@ def _reset(self):
 
     recomp(self)
 
-    def find_dev(net):
+    def find_dev(net, level=0):
         for c in net.children():
             if list(c.children()) == [] and hasattr(c, "weight"):
                 return c.weight.device
             else:
                 if hasattr(c, "weight"):
                     return c.weight.device
-                return find_dev(c)
+                lower = find_dev(c, level=level+1)
+                if lower is not None:
+                    return lower
+                else:continue
         if list(net.children()) == [] and hasattr(net, "weight"):
             return net.weight.device
         else:
             if hasattr(net, "weight"):
                 return net.weight.device
-            print(net, flush=True)
-            raise AttributeError("No device found?")
-
+            if level == 0:
+                print(net, flush=True)
+                raise AttributeError("No device found?")
+            else:
+                return None
     if self.training:
         # SPECIFIČNO DAU PROBLEM
         self.eval()

@@ -26,7 +26,7 @@ def type_convert(typ):
 output = {}
 
 prefix = "allTests_last4"
-prefix = "allTests_last4_"
+#prefix = "allTests_last4_"
 #prefix = "allTests_last"
 for version in architectures:  # classigication, segmetnationg
     for dataset in version[1]:
@@ -132,13 +132,13 @@ for version in architectures:  # classigication, segmetnationg
 
                                     #print(evaluation)
                             #quit()
-generateResults = True
+generateResults = False
 if generateResults:
     print(output)
     with open(f"results{prefix}.txt", "w") as f:
         print(json.dumps(output, indent=4, sort_keys=True), file=f)
 
-make_speedup_graphs = True
+make_speedup_graphs = False
 if make_speedup_graphs:
     loc="gpu"
     speeds = []
@@ -210,7 +210,7 @@ if make_speedup_graphs:
 
 
 
-images = False
+images = True
 if not images:
     print("skipping images...")
     quit()
@@ -238,10 +238,11 @@ def readable(n):
     if n == "agri":
         return "Agri-Adapt"
     if n == "dau":
-        return "moving"
+        return "DAU"
     if n == "perf":
-        return "standard"
-
+        return "Standard"
+if not os.path.exists(f"./{prefix}/graphs2/"):
+    os.mkdir(f"./{prefix}/graphs2/")
 for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]:
     for dataset in ["cifar", "ucihar", "agri"]:
         if "unet" in network and dataset != "agri": continue
@@ -281,24 +282,25 @@ for network in ["resnet18", "mobnetv2", "mobnetv3s", "unet_agri", "unet_custom"]
                 for ind, ac in enumerate(accs):
                     e = (1,2,3,4,None)[ind]
                     plt.bar([x * 6 + ind for x in range(len(ac))], ac, label=f"Eval mode: {e},{e}")
-                plt.xticks([x * 6 + 2 for x in range(len(names))], [str(x) for x in names[0]], rotation=90)
+                plt.xticks([x * 6 + 2 for x in range(len(names))], [str(x) for x in names[0]], rotation=90, fontsize=11)
 
                 plt.grid()
                 if dataset != "agri":
-                    plt.ylabel("Accuracy (%)")
-                    plt.yticks([x/10 for x in range(10)], [x*10 for x in range(10)])
+                    plt.ylabel("Accuracy (%)", fontsize=14)
+                    plt.yticks([x/10 for x in range(10)], [x*10 for x in range(10)], fontsize=11)
                 else:
-                    plt.ylabel("IoU on class \"weeds\" (%)")
-                    plt.yticks([x/10 for x in range(8)], [x*10 for x in range(8)])
+                    plt.ylabel("IoU on class \"weeds\" (%)", fontsize=12)
+                    plt.yticks([x/10 for x in range(8)], [x*10 for x in range(8)], fontsize=11)
                 if not os.path.exists(f"./{prefix}/graphs"):
                     os.makedirs(f"./{prefix}/graphs")
 
-                plt.legend(loc="lower right")
-                plt.title(f"Perforation of {readable(network)} with {readable(dataset)} dataset\n{readable(typa)} perforation")
+                plt.title(f"Perforation of {readable(network)} with {readable(dataset)} dataset\n{readable(typa)} perforation", fontsize=15)
                 #plt.legend(loc="best")
-                plt.xlabel("Training perforation")
+                plt.xlabel("Training perforation", fontsize=14)
                 plt.tight_layout()
-                plt.savefig(f"./{prefix}/graphs/{network}_{dataset}_{img}_{typ}.png")
+
+                plt.legend(loc="lower right", fontsize=12, bbox_to_anchor=(0.58, -0.555))
+                plt.savefig(f"./{prefix}/graphs2/{network}_{dataset}_{img}_{typ}.pdf", format="pdf")
                 #plt.show()
                 plt.clf()
                 print(name, accs)

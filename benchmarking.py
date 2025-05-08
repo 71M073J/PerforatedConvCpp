@@ -5,11 +5,11 @@ import time
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.models.resnet
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import BinaryJaccardIndex, BinaryPrecision, BinaryRecall, BinaryF1Score
 from torchvision.models import resnet18, mobilenet_v2, mobilenet_v3_small
+from torchvision.datasets import CIFAR10
 import torchvision.transforms.v2 as transforms
 from agriadapt.segmentation.data.data import ImageDataset as AgriDataset
 from torchinfo import summary
@@ -79,7 +79,7 @@ def profile_net(net, op, data_loader, vary_perf, batch_size, curr_file,
 
                 op.step()
                 op.zero_grad()
-                if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
+                if type(data_loader.dataset) in [CIFAR10, CINIC10, UciHAR]:
                     # print("Should be here")
                     acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
                     train_accs.append(torch.sum(acc) / batch_size)
@@ -146,12 +146,12 @@ def get_datasets(data, batch_size, augment=True, image_resolution=None):
         # (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010) #old values<- supposedly miscalculated
         tf = transforms.Compose(tf)
         train = torch.utils.data.DataLoader(
-            torchvision.datasets.CIFAR10(
+            CIFAR10(
                 root='./data', train=True, download=True, transform=tf), batch_size=batch_size, shuffle=True,
             num_workers=num_workers, generator=g, )
 
         valid = torch.utils.data.DataLoader(
-            torchvision.datasets.CIFAR10(
+            CIFAR10(
                 root='./data', train=False, download=True, transform=tf), batch_size=batch_size, shuffle=False,
             num_workers=num_workers, generator=g, )
     elif "agri" in data:
@@ -318,7 +318,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
         op.step()
         op.zero_grad()
-        if type(data_loader.dataset) in [torchvision.datasets.CIFAR10, CINIC10, UciHAR]:
+        if type(data_loader.dataset) in [CIFAR10, CINIC10, UciHAR]:
             # print("Should be here")
             acc = (F.softmax(pred.detach(), dim=1).argmax(dim=1) == classes).cpu()
             train_accs.append(torch.sum(acc) / batch_size)
@@ -392,7 +392,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
               perforation_mode=(2, 2), perforation_type="perf",
               train_loader=None, valid_loader=None, test_loader=None, max_epochs=1, in_size=(2, 3, 32, 32),
               summarise=True, pretrained=True, dataset="idk", prefix="", do_grad=False, savemodels=False,
-              device="cpu", batch_size=2, reporting=True, file=None, grad_clip=None, eval_modes=(None,)):
+              device="cpu", batch_size=2, reporting=True, file=None, grad_clip=None, eval_modes=(None,), eval_modes_test=(None,)):
     if type(perforation_mode) not in [tuple, list]:
         perforation_mode = (perforation_mode, perforation_mode)
     if type(perforation_mode[0]) == str:
@@ -401,7 +401,15 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         vary_perf = None
 
     if eval_modes is None:
-        eval_modes = (None,)
+        if eval_modes_test is None:
+            eval_modes_test = (None,)
+            eval_modes = (None,)
+        else:
+            eval_modes = tuple(eval_modes_test[0])
+    else:
+        if eval_modes_test is None:
+            eval_modes_test = eval_modes
+
     if hasattr(net, "_get_perforation"):
         n_conv = len(net._get_perforation())
     else:
@@ -484,11 +492,11 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     if test_loader is None:
         test_loader = valid_loader
     best_outputs = []
-    if eval_modes is None:
-        eval_modes = (None,)
+    if eval_modes_test is None:
+        eval_modes_test = (None,)
     metrics = []
     allMetrics = {}
-    for ind, mode in enumerate(eval_modes):
+    for ind, mode in enumerate(eval_modes_test):
         #net.eval()
         if best_models[ind] is not None:
             net.load_state_dict(best_models[ind])
@@ -519,12 +527,16 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+
+    #print("TODO REMOVEAAAAAA")
+    #from Architectures.cifarNet import CifarNet
     architectures = [
 
-        
-        [[(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), (mobilenet_v3_small, "mobnetv3s")], ["cifar", "ucihar"],
+        #(CifarNet, "cifnet")
+        [[(mobilenet_v3_small, "mobnetv3s"),(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), ], ["cifar", "ucihar"],
          [32]],
-        # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,so it would be about 2 hour training per config, maybe later
+        # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,
+        # so it would be about 2 hour training per config, maybe more (potentially do later?)
         [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],
     ]
 
@@ -577,9 +589,11 @@ def runAllTests():
                                 else:
                                     perf_type = None
 
-                            print("DOING PERF TYPE OVERRIDE; REMOVE THIS")
-                            perf_type = "dau"
-                            perforation = 2
+                            #print("DOING PERF TYPE OVERRIDE; REMOVE THIS")
+                            #perf_type = "dau"
+                            #perforation = 2
+                            #alreadyNoPerf = True
+                            #perf = (perforation, perforation)
 
 
                             prefix = "allTests_lastlast"
@@ -632,6 +646,7 @@ def runAllTests():
 
 
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
+                            op = torch.optim.Adam(net.parameters(), lr=lr*0.001, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
@@ -666,7 +681,8 @@ def runAllTests():
                                                                          perforation_mode=perf,
                                                                          run_name=run_name, batch_size=batch_size,
                                                                          loss_function=loss_fn, prefix=pref,
-                                                                         eval_modes=eval_modes, in_size=in_size,
+                                                                         eval_modes=perforation if (type(perforation) == int or perforation is None) else None,
+                                                                         eval_modes_test=eval_modes, in_size=in_size,
                                                                          dataset=dataset,
                                                                          perforation_type=perf_type, file=f,
                                                                          summarise=False)
@@ -707,7 +723,9 @@ def runAllTests():
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                             run_name=run_name, batch_size=batch_size, savemodels=True,
                                                             loss_function=loss_fn,prefix=prefix,do_grad=True,
-                                                            eval_modes=eval_modes, in_size=in_size, dataset=dataset,
+                                                                     eval_modes=[perforation] if (type(
+                                                                         perforation) == int or perforation is None) else None,
+                                                                     eval_modes_test=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
 
                                 if not "agri" in dataset:
