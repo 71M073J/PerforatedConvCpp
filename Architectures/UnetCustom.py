@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 #from perforateCustomNet import perforate_net_perfconv, perforate_net_downActivUp
-from Architectures.PerforatedConv2d import PerforatedConv2d, DownActivUp
+#from Architectures.PerforatedConv2d import PerforatedConv2d, DownActivUp
 class UNet(nn.Module):
     def __init__(self, out_channels):
         super(UNet, self).__init__()
@@ -59,7 +59,7 @@ class UNet(nn.Module):
             nn.ReLU(),
         )
 
-class UNetPerf(nn.Module):
+"""class UNetPerf(nn.Module):
     def __init__(self, out_channels):
         super(UNetPerf, self).__init__()
         self.conv1 = self.contract_block1(3, 64, 5)
@@ -117,7 +117,7 @@ class UNetPerf(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
         )
-
+"""
 if __name__ == "__main__":
     net = UNet(3)
     net(torch.ones((1, 3, 256, 256)))

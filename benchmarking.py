@@ -324,7 +324,7 @@ def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforat
             train_accs.append(torch.sum(acc) / batch_size)
         else:
             calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
-            acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
+            acc = results[f"{run_name}/iou/weeds"][-1]
             train_accs.append(acc)
             ...
 
