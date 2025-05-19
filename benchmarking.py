@@ -465,6 +465,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         train_mode = None
         if hasattr(net, "_get_perforation"):
             train_mode = net._get_perforation()
+        if epoch > max_epochs * 0.8:
+            eval_modes = eval_modes_test
         for ind, mode in enumerate(eval_modes):
 
             print("\ntesting eval mode", mode)
