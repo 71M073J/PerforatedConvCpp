@@ -60,12 +60,15 @@ if __name__ == "__main__":
     res = net(data)
     suma = loss_fn(res, dataCompare)
     suma.backward()
-    print(res)
-    print("\n---\n")
-    print(suma)
-    print(net.conv1.weight.grad)
-    print(data.grad * 1000)
-    print(net.conv1.weight.shape)
+    verbose = False
+    if verbose:
+        print(res)
+        print("\n---\n")
+        print(suma)
+        print(net.conv1.weight.grad)
+        print(data.grad * 1000)
+        print(net.conv1.weight.shape)
+
     base = "./RpiComparison/"
 
 
@@ -82,7 +85,7 @@ if __name__ == "__main__":
     print((resCheck - res).mean(), "mean res diff")
 
 
-    if not os.path.exists(f"{base}weightGrad.bin"):
+    if os.path.exists(f"{base}weightGrad.bin"):
         net.conv1.weight.grad.detach().numpy().tofile(f"{base}weightGrad.bin")
         data.grad.detach().numpy().tofile(f"{base}dataGrad.bin")
         res.detach().numpy().tofile(f"{base}res.bin")
