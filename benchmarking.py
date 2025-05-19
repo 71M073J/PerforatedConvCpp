@@ -648,7 +648,7 @@ def runAllTests():
 
 
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
-                            op = torch.optim.Adam(net.parameters(), lr=lr*0.001, weight_decay=0.0005)
+                            #op = torch.optim.Adam(net.parameters(), lr=lr*0.001, weight_decay=0.0005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)

@@ -130,11 +130,11 @@ if __name__ == "__main__":
         from torchmetrics.classification import BinaryJaccardIndex, BinaryPrecision, BinaryRecall, BinaryF1Score
         metrics = {
             "iou": BinaryJaccardIndex,
-            #"precision": BinaryPrecision,
-            #"recall": BinaryRecall,
-            #"f1score": BinaryF1Score,
+            "precision": BinaryPrecision,
+            "recall": BinaryRecall,
+            "f1score": BinaryF1Score,
         }
-        for op in [torch.optim.Adam(net.parameters(), lr=0.0001, weight_decay=0.0005), torch.optim.SGD(net.parameters(), lr=0.1, weight_decay=0.0005)]:
+        for op in [torch.optim.Adam(net.parameters(), lr=0.0001, weight_decay=0.1),torch.optim.SGD(net.parameters(), lr=0.5, weight_decay=0.0005)]:
             bs = 16
             device = "cuda" if torch.cuda.is_available() else "cpu"
             epochs = 300
@@ -142,7 +142,7 @@ if __name__ == "__main__":
             net.to(device)
             #op =torch.optim.Adam(net.parameters(), lr=0.0001, weight_decay=0.1)
             #op = torch.optim.SGD(net.parameters(), lr=0.1, weight_decay=0.0005)
-            lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(op,0.99)
+            #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(op,0.99)
             train_loader, valid_loader, test_loader = get_datasets("agri", bs, True, (128,128))
             import time
 
@@ -156,8 +156,9 @@ if __name__ == "__main__":
                     pred = net(batch)
                     loss = loss_fn(pred, classes)
                     loss.backward()
+                    op.step()
                     op.zero_grad()
-                    lr_scheduler.step()
+                    #lr_scheduler.step()
                     losses.append(loss.item())
                     calculate_segmentation_metrics(classes, pred, "test", metrics, device, results)
                 t2 = time.time()
@@ -173,9 +174,7 @@ if __name__ == "__main__":
                         classes = classes.to(device)
                         pred = net(batch)
                         loss = loss_fn(pred, classes)
-                        loss.backward()
-                        op.zero_grad()
-                        lr_scheduler.step()
+                        #lr_scheduler.step()
                         losses.append(loss.item())
                         calculate_segmentation_metrics(classes, pred, "test", metrics, device, results)
 
