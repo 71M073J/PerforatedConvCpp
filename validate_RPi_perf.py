@@ -85,7 +85,7 @@ if __name__ == "__main__":
     print((resCheck - res).mean(), "mean res diff")
 
 
-    if os.path.exists(f"{base}weightGrad.bin"):
+    if not os.path.exists(f"{base}weightGrad.bin"):
         net.conv1.weight.grad.detach().numpy().tofile(f"{base}weightGrad.bin")
         data.grad.detach().numpy().tofile(f"{base}dataGrad.bin")
         res.detach().numpy().tofile(f"{base}res.bin")
