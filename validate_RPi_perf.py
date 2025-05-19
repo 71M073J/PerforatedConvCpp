@@ -54,7 +54,8 @@ if __name__ == "__main__":
     dataCompare[:, 2, :, 1::2] = 0.5
 
     dataCompare[:, 1, :6, :5] += 0.5
-    loss_fn = torch.nn.MSELoss()
+    #loss_fn = torch.nn.MSELoss()
+    loss_fn = torch.nn.CrossEntropyLoss()
 
     res = net(data)
     suma = loss_fn(res, dataCompare)
