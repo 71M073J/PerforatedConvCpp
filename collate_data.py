@@ -23,117 +23,191 @@ def type_convert(typ):
         return "Normal perforation"
     return "No perforation"
 
+def get_data_from_prefix(prefix):
+    output = {}
+    for version in architectures:  # classigication, segmetnationg
+        for dataset in version[1]:
+            if dataset == "agri":
+                lr = 0.5
+                max_epochs = 10
+                batch_size = 32
+            elif dataset == "ucihar":
+                max_epochs = 10
+                batch_size = 32
+                lr = 0.01
+            else:
+                max_epochs = 10
+                batch_size = 32
+                lr = 0.01
+
+            for model, modelname in version[0]:
+                for img in version[2]:
+                    # model = UNet
+                    # img = 128
+                    # dataset = "agri"
+                    img_res = (img, img)
+                    in_size = (2, 3, img, img)
+                    if img == 128:
+                        batch_size = 32
+                    elif img == 256:
+                        batch_size = 16
+                    elif img == 512:
+                        batch_size = 4
+
+                    alreadyNoPerf = False
+                    for perforation in (None, 2, 3, "random", "2by2_equivalent"):
+                        perf = (perforation, perforation)
+                        if perforation is None:
+                            if alreadyNoPerf:
+                                continue
+                            else:
+                                alreadyNoPerf = True
+
+                        for perf_type in ["perf", "dau"]:
+                            if modelname.startswith("mobnet") and perf_type == "dau":
+                                continue
+                            if perforation is None:
+                                if perf_type == "dau":
+                                    continue
+                                else:
+                                    perf_type = None
+                            name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
+
+                            graphname = f"{modelname}_{img}_{dataset}_{perf_type}"
+
+                            curr_file = f"{name}"
+
+                            run_name = f"{curr_file}"
+                            if not os.path.exists(f"./{prefix}/"):
+                                os.mkdir(f"./{prefix}")
+                            if not os.path.exists(f"./{prefix}/imgs"):
+                                os.mkdir(f"./{prefix}/imgs")
+                            extras = [""]
+                            try:
+                                open(f"{prefix}/cpu_old/{run_name}_best.txt", "r")
+                                extras.append("/cpu_old")
+                            except:
+                                pass
+                            for extra in extras:
+                                try:
+                                    with open(f"{prefix}{extra}/{run_name}_best.txt", "r") as data:
+                                        line = data.readline()
+                                        pf = "Training perforation: " + str(perforation)
+                                        for evaluation in replace_all(line,
+                                                                      {"[": "", "]": "", "Validation ": "", "((": "(",
+                                                                       "))": ")"}).split("', '"):
+                                            if extra == "":
+                                                if "acc" in evaluation:
+                                                    eval_mode = evaluation.split(":")[0].split(" (")[1][0:4]
+                                                    eval_mode = eval_mode if eval_mode != "None" else "Same as training"
+                                                    eval_mode = "Evaluation perforation: " + eval_mode
+                                                    acc = evaluation.split(":")[1] + "%"
+                                                    img = str(img)
+                                                    # perforation = #str(perforation)
+                                                    if modelname not in output:
+                                                        output[modelname] = {dataset: {
+                                                            type_convert(perf_type): {img: {pf: {eval_mode: acc}}}}}
+                                                    elif dataset not in output[modelname]:
+                                                        output[modelname][dataset] = {
+                                                            type_convert(perf_type): {img: {pf: {eval_mode: acc}}}}
+                                                    elif type_convert(perf_type) not in output[modelname][dataset]:
+                                                        output[modelname][dataset][type_convert(perf_type)] = {
+                                                            img: {pf: {eval_mode: acc}}}
+                                                    elif img not in output[modelname][dataset][type_convert(perf_type)]:
+                                                        output[modelname][dataset][type_convert(perf_type)][img] = {
+                                                            pf: {eval_mode: acc}}
+                                                    elif pf not in output[modelname][dataset][type_convert(perf_type)][
+                                                        img]:
+                                                        output[modelname][dataset][type_convert(perf_type)][img][pf] = {
+                                                            eval_mode: acc}
+                                                    else:
+                                                        output[modelname][dataset][type_convert(perf_type)][img][pf][
+                                                            eval_mode] = acc
+                                                elif "time" in evaluation:
+                                                    # print(evaluation)
+                                                    output[modelname][dataset][type_convert(perf_type)][img][pf][
+                                                        "Training time"] = evaluation.split(":")[1][:-2]
+                                                    output[modelname][dataset][type_convert(perf_type)][img][pf][
+                                                        "Training time improvement"] = str(int(10000 * (1 - \
+                                                                                                        float(output[
+                                                                                                                  modelname][
+                                                                                                                  dataset][
+                                                                                                                  type_convert(
+                                                                                                                      perf_type)][
+                                                                                                                  img][
+                                                                                                                  pf][
+                                                                                                                  "Training time"].split()[
+                                                                                                                  0]) / \
+                                                                                                        float(output[
+                                                                                                                  modelname][
+                                                                                                                  dataset][
+                                                                                                                  type_convert(
+                                                                                                                      "")][
+                                                                                                                  img][
+                                                                                                                  pf.split(
+                                                                                                                      ":")[
+                                                                                                                      0] + ": None"][
+                                                                                                                  "Training time"].split()[
+                                                                                                                  0]))) / 100) + "%"
+                                            elif "time" in evaluation:
+                                                # print(evaluation)
+                                                output[modelname][dataset][type_convert(perf_type)][img][pf][
+                                                    "Training time CPU"] = evaluation.split(":")[1][:-2]
+                                                output[modelname][dataset][type_convert(perf_type)][img][pf][
+                                                    "Training time CPU improvement"] = str(int(10000 * (1 - \
+                                                                                                        float(output[
+                                                                                                                  modelname][
+                                                                                                                  dataset][
+                                                                                                                  type_convert(
+                                                                                                                      perf_type)][
+                                                                                                                  img][
+                                                                                                                  pf][
+                                                                                                                  "Training time CPU"].split()[
+                                                                                                                  0]) / \
+                                                                                                        float(output[
+                                                                                                                  modelname][
+                                                                                                                  dataset][
+                                                                                                                  type_convert(
+                                                                                                                      "")][
+                                                                                                                  img][
+                                                                                                                  pf.split(
+                                                                                                                      ":")[
+                                                                                                                      0] + ": None"][
+                                                                                                                  "Training time CPU"].split()[
+                                                                                                                  0]))) / 100) + "%"
+
+                                            # print(evaluation)
+                                except:
+                                    print(
+                                        f"File {prefix}{extra}/{run_name}_best.txt does not exist, skipping...")  # quit()
+
+    return output
 output = {}
+
+
+
 
 prefix = "allTests_last4"
 prefix = "ramspeed_tests/ramspeed2"
 #prefix = "allTests_last4_"
 #prefix = "allTests_last"
-for version in architectures:  # classigication, segmetnationg
-    for dataset in version[1]:
-        if dataset == "agri":
-            lr = 0.5
-            max_epochs = 10
-            batch_size = 32
-        elif dataset == "ucihar":
-            max_epochs = 10
-            batch_size = 32
-            lr = 0.01
-        else:
-            max_epochs = 10
-            batch_size = 32
-            lr = 0.01
 
-        for model, modelname in version[0]:
-            for img in version[2]:
-                # model = UNet
-                # img = 128
-                # dataset = "agri"
-                img_res = (img, img)
-                in_size = (2, 3, img, img)
-                if img == 128:
-                    batch_size = 32
-                elif img == 256:
-                    batch_size = 16
-                elif img == 512:
-                    batch_size = 4
+outputFast = get_data_from_prefix(prefix=prefix)
+outputSlow = get_data_from_prefix(prefix="ramspeed_tests/ramspeed1")
 
-                alreadyNoPerf = False
-                for perforation in (None, 2, 3, "random", "2by2_equivalent"):
-                    perf = (perforation, perforation)
-                    if perforation is None:
-                        if alreadyNoPerf:
-                            continue
-                        else:
-                            alreadyNoPerf = True
+def get_key(n):
+    if n == 3:
+        return "Upscale after activation"
+    return "No perforation"
+def get_training_time(output, perf):
+    return float(output["unet_agri"]["agri"][get_key(perf)]["128"][f"Training perforation: {perf}"]["Training time"].split(" ")[0])
 
-                    for perf_type in ["perf", "dau"]:
-                        if modelname.startswith("mobnet") and perf_type == "dau":
-                            continue
-                        if perforation is None:
-                            if perf_type == "dau":
-                                continue
-                            else:
-                                perf_type = None
-                        name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
-
-                        graphname = f"{modelname}_{img}_{dataset}_{perf_type}"
-
-                        curr_file = f"{name}"
+print(get_training_time(outputSlow, 3)/get_training_time(outputSlow, None) * 100, "% speedup with slow RAM (1333 MHz)")
+print(get_training_time(outputFast, 3)/get_training_time(outputFast, None) * 100, "% speedup with FAST RAM (3200 MHz)")
+quit()
+print(output)
 
 
-                        run_name = f"{curr_file}"
-                        if not os.path.exists(f"./{prefix}/"):
-                            os.mkdir(f"./{prefix}")
-                        if not os.path.exists(f"./{prefix}/imgs"):
-                            os.mkdir(f"./{prefix}/imgs")
-                        extras = [""]
-                        try:
-                            open(f"{prefix}/cpu_old/{run_name}_best.txt", "r")
-                            extras.append("/cpu_old")
-                        except: pass
-                        for extra in extras:
-                            try:
-                                with open(f"{prefix}{extra}/{run_name}_best.txt", "r") as data:
-                                    line = data.readline()
-                                    pf = "Training perforation: " + str(perforation)
-                                    for evaluation in replace_all(line, {"[":"", "]":"", "Validation ":"", "((":"(", "))":")"}).split("', '"):
-                                        if extra == "":
-                                            if "acc" in evaluation:
-                                                eval_mode = evaluation.split(":")[0].split(" (")[1][0:4]
-                                                eval_mode = eval_mode if eval_mode != "None" else "Same as training"
-                                                eval_mode = "Evaluation perforation: " + eval_mode
-                                                acc = evaluation.split(":")[1] + "%"
-                                                img = str(img)
-                                                #perforation = #str(perforation)
-                                                if modelname not in output:
-                                                    output[modelname] = {dataset:{type_convert(perf_type):{img:{pf:{eval_mode:acc}}}}}
-                                                elif dataset not in output[modelname]:
-                                                    output[modelname][dataset] = {type_convert(perf_type):{img:{pf:{eval_mode:acc}}}}
-                                                elif type_convert(perf_type) not in output[modelname][dataset]:
-                                                    output[modelname][dataset][type_convert(perf_type)] = {img:{pf:{eval_mode:acc}}}
-                                                elif img not in output[modelname][dataset][type_convert(perf_type)]:
-                                                    output[modelname][dataset][type_convert(perf_type)][img] = {pf:{eval_mode:acc}}
-                                                elif pf not in output[modelname][dataset][type_convert(perf_type)][img]:
-                                                    output[modelname][dataset][type_convert(perf_type)][img][pf] = {eval_mode:acc}
-                                                else:
-                                                    output[modelname][dataset][type_convert(perf_type)][img][pf][eval_mode] = acc
-                                            elif "time" in evaluation:
-                                                #print(evaluation)
-                                                output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time"] = evaluation.split(":")[1][:-2]
-                                                output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time improvement"] = str(int(10000 * (1 - \
-                                                    float(output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time"].split()[0])/\
-                                                    float(output[modelname][dataset][type_convert("")][img][pf.split(":")[0]+": None"]["Training time"].split()[0]))) / 100) + "%"
-                                        elif "time" in evaluation:
-                                            #print(evaluation)
-                                            output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU"] = evaluation.split(":")[1][:-2]
-                                            output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU improvement"] = str(int(10000 * (1 - \
-                                                    float(output[modelname][dataset][type_convert(perf_type)][img][pf]["Training time CPU"].split()[0])/\
-                                                    float(output[modelname][dataset][type_convert("")][img][pf.split(":")[0]+": None"]["Training time CPU"].split()[0]))) / 100) + "%"
-
-                                        #print(evaluation)
-                            except:
-                                print(f"File {prefix}{extra}/{run_name}_best.txt does not exist, skipping...")#quit()
 generateResults = True
 if generateResults:
     print(output)

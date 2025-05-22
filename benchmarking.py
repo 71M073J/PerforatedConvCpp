@@ -365,8 +365,8 @@ def validate(net, valid_loader, device, loss_fn, file, eval_mode, batch_size, re
 
             if type(valid_loader.dataset) == AgriDataset:
                 calculate_segmentation_metrics(classes, pred, run_name, metrics, device, results)
-                acc = torch.mean(torch.tensor(results[f"{run_name}/iou/weeds"]))
-                valid_accs.append(acc.detach().cpu())
+                acc = results[f"{run_name}/iou/weeds"][-1]
+                valid_accs.append(acc)
 
             else:
                 for s, c in zip(softm.argmax(dim=1), classes):
@@ -421,8 +421,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     confs = []
     if summarise:
         summary(net, input_size=in_size)
-    best_valid_losses = [999] * len(eval_modes)
-    best_models = [None] * len(eval_modes)
+    best_valid_losses = [999] * len(eval_modes_test)
+    best_models = [None] * len(eval_modes_test)
     grad_ep = False
     for epoch in range(max_epochs):
         if do_grad:
@@ -530,17 +530,17 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
 
-    #print("TODO REMOVEAAAAAA")
     #from Architectures.cifarNet import CifarNet
     architectures = [
 
+        [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, ]],#256, 512
+
         #(CifarNet, "cifnet")
-        [[(mobilenet_v3_small, "mobnetv3s"),(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), ], ["cifar", "ucihar"],
-         [32]],
+        #[[(mobilenet_v3_small, "mobnetv3s"),(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), ], ["cifar", "ucihar"],
+        # [32]],
         # "cinic" takes too long to run, ~45sec per epoch compared to ~9 for cifar ,
         # so it would be about 2 hour training per config, maybe more (potentially do later?)
-        [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],
-    ]
+        ]
 
     for version in architectures:  # classigication, segmetnationg
         for dataset in version[1]:
@@ -576,7 +576,7 @@ def runAllTests():
                         batch_size = 4
 
                     alreadyNoPerf = False
-                    for perforation in (None, 2, 3, "random", "2by2_equivalent"):
+                    for perforation in ( 3, ):#None, 2,"random", "2by2_equivalent"
                         perf = (perforation, perforation)
                         if perforation is None:
                             if alreadyNoPerf:
@@ -598,7 +598,7 @@ def runAllTests():
                             #perf = (perforation, perforation)
 
 
-                            prefix = "allTests_lastlast"
+                            prefix = "test"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
@@ -648,11 +648,11 @@ def runAllTests():
 
 
                             op = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=0.0005)
-                            #op = torch.optim.Adam(net.parameters(), lr=lr*0.001, weight_decay=0.0005)
+                            #op = torch.optim.Adam(net.parameters(), lr=lr*0.02, weight_decay=0.005)
                             train_loader, valid_loader, test_loader = get_datasets(dataset, batch_size, True,
                                                                                    image_resolution=img_res)
                             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
-
+                            #scheduler = torch.optim.lr_scheduler.ExponentialLR(op, 0.99)
                             run_name = f"{curr_file}"
                             if not os.path.exists(f"./{prefix}/"):
                                 os.mkdir(f"./{prefix}")
@@ -683,7 +683,7 @@ def runAllTests():
                                                                          perforation_mode=perf,
                                                                          run_name=run_name, batch_size=batch_size,
                                                                          loss_function=loss_fn, prefix=pref,
-                                                                         eval_modes=perforation if (type(perforation) == int or perforation is None) else None,
+                                                                         eval_modes=[perf] if (type(perforation) == int or perforation is None) else None,
                                                                          eval_modes_test=eval_modes, in_size=in_size,
                                                                          dataset=dataset,
                                                                          perforation_type=perf_type, file=f,
@@ -725,7 +725,7 @@ def runAllTests():
                                                             max_epochs=max_epochs, device=device, perforation_mode=perf,
                                                             run_name=run_name, batch_size=batch_size, savemodels=True,
                                                             loss_function=loss_fn,prefix=prefix,do_grad=True,
-                                                                     eval_modes=[perforation] if (type(
+                                                                     eval_modes=[perf] if (type(
                                                                          perforation) == int or perforation is None) else None,
                                                                      eval_modes_test=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
