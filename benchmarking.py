@@ -277,6 +277,58 @@ def get_first_layer_weights(net):
         elif len(list(sub.children())) != 0:
             return get_first_layer_weights(sub)
     raise ModuleNotFoundError("Weight not found")
+
+
+def cpuRunF(prefix, net, loss_fn, curr_file, overrideExisting, op, train_loader, valid_loader, test_loader, perf,
+            run_name, perforation, eval_modes, in_size, dataset, perf_type, cpuRun):
+    print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
+    pref = prefix + "/cpu"
+    if not os.path.exists(f"./{pref}"):
+        os.makedirs(f"./{pref}")
+    batch_size = 2
+    max_epochs = 2
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
+    device = "cpu"
+    net.to(device)
+    loss_fn.to(device)
+    if os.path.exists(f"./{pref}/{curr_file}_best.txt") and not overrideExisting:
+        print("cpu speedtest exists, next")
+        return 0
+    with open(f"./{pref}/{curr_file}.txt", "w") as f:
+        best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
+                                             valid_loader=valid_loader,
+                                             test_loader=test_loader,
+                                             max_epochs=max_epochs, device=device,
+                                             perforation_mode=perf,
+                                             run_name=run_name, batch_size=batch_size,
+                                             loss_function=loss_fn, prefix=pref,
+                                             eval_modes=[perf] if (
+                                                         type(perforation) == int or perforation is None) else None,
+                                             eval_modes_test=eval_modes, in_size=in_size,
+                                             dataset=dataset,
+                                             perforation_type=perf_type, file=f,
+                                             summarise=False)
+
+        with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
+            print(best_out, file=ff)
+        if cpuRun: return 0
+        print("Now running profiling...")
+        if type(perforation) == str:
+            vary_perf = True
+        else:
+            vary_perf = None
+        pref = prefix + "/profiling"
+        if os.path.exists(f"./{pref}/{curr_file}_cpu.txt"):
+            print("profiling also exists, next...")
+            return 0
+        if not os.path.exists(pref):
+            os.makedirs(pref)
+        profile_net(net, op, data_loader=train_loader, vary_perf=vary_perf,
+                    batch_size=batch_size, curr_file=curr_file, perforation_mode=perf,
+                    run_name=run_name, prefix=pref, loss_fn=loss_fn)
+    return 0  # skip already processed configurations
+
+
 def train(net, op, data_loader, device, loss_fn, vary_perf, batch_size, perforation_type, run_name, grad_clip,
           perforation_mode, n_conv, grad_ep):
     net.train()
@@ -527,6 +579,8 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
     return best_outputs, confs, allMetrics
 
 
+
+
 def runAllTests():
     device = "cpu" if not torch.cuda.is_available() else "cuda:0"
 
@@ -662,53 +716,11 @@ def runAllTests():
                             cpuRun = False
                             overrideExisting = False
                             if os.path.exists(f"./{prefix}/{curr_file}_best.txt") or cpuRun:
-                                print("Cuda run (for accuracy performance) exists, running cpu speedtest...")
-                                pref = prefix + "/cpu"
-                                if not os.path.exists(f"./{pref}"):
-                                    os.makedirs(f"./{pref}")
-                                batch_size = 2
-                                max_epochs = 2
-                                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=max_epochs)
-                                device = "cpu"
-                                net.to(device)
-                                loss_fn.to(device)
-                                if os.path.exists(f"./{pref}/{curr_file}_best.txt") and not overrideExisting:
-                                    print("cpu speedtest exists, next")
+                                contin = cpuRunF(prefix, net, loss_fn, curr_file, overrideExisting, op, train_loader,
+                                                 valid_loader, test_loader, perf, run_name, perforation, eval_modes,
+                                                 in_size, dataset, perf_type, cpuRun)
+                                if contin == 0:
                                     continue
-                                with open(f"./{pref}/{curr_file}.txt", "w") as f:
-                                    best_out, confs, metrics = benchmark(net, op, scheduler, train_loader=train_loader,
-                                                                         valid_loader=valid_loader,
-                                                                         test_loader=test_loader,
-                                                                         max_epochs=max_epochs, device=device,
-                                                                         perforation_mode=perf,
-                                                                         run_name=run_name, batch_size=batch_size,
-                                                                         loss_function=loss_fn, prefix=pref,
-                                                                         eval_modes=[perf] if (type(perforation) == int or perforation is None) else None,
-                                                                         eval_modes_test=eval_modes, in_size=in_size,
-                                                                         dataset=dataset,
-                                                                         perforation_type=perf_type, file=f,
-                                                                         summarise=False)
-
-
-                                    with open(f"./{pref}/{curr_file}_best.txt", "w") as ff:
-                                        print(best_out, file=ff)
-                                    if cpuRun:continue
-                                    print("Now running profiling...")
-                                    if type(perforation) == str:
-                                        vary_perf = True
-                                    else:
-                                        vary_perf = None
-                                    pref = prefix + "/profiling"
-                                    if os.path.exists(f"./{pref}/{curr_file}_cpu.txt"):
-                                        print("profiling also exists, next...")
-                                        continue
-                                    if not os.path.exists(pref):
-                                        os.makedirs(pref)
-                                    profile_net(net, op, data_loader=train_loader, vary_perf=vary_perf,
-                                                batch_size=batch_size, curr_file=curr_file, perforation_mode=perf,
-                                                run_name=run_name, prefix=pref, loss_fn=loss_fn)
-                                continue #skip already processed configurations
-
                             print("net:", modelname)
                             print("Dataset:", dataset)
                             print(max_epochs, "epochs")
