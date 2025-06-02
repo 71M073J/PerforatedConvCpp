@@ -14,8 +14,12 @@ from numpy import floor, ceil
 from sklearn.model_selection import train_test_split
 from torch import Generator, tensor, argmax, ones, zeros, cat, unique, flatten
 from torch.utils.data import Dataset, random_split
-from torchvision.transforms import v2 as transforms
-
+try:
+    from torchvision.transforms import v2 as transforms
+    old = False
+except:
+    import torchvision.transforms as transforms
+    old = True
 from shapely import Polygon, Point
 
 from PIL import Image
@@ -27,8 +31,10 @@ class ImageDataset(Dataset):
         self.X = X
         self.y = y
         self.transform=transform
-        self.tf = transforms.ToImage()
-
+        if not old:
+            self.tf = transforms.ToImage()
+        else:
+            self.tf = torch.cat
     def __len__(self):
         return len(self.X)
 
@@ -37,7 +43,12 @@ class ImageDataset(Dataset):
         #print(self.y[item].shape)
         #print(self.tf(self.y[item]).shape)
         if self.transform is not None:
-            return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
+            if old:
+                #print("we old")
+                return self.transform(self.tf((self.X[item],self.y[item])))
+            else:
+                #print("we new")
+                return self.transform(self.tf(self.X[item]), self.tf(self.y[item]))
         else:
             return self.tf(self.X[item]), self.tf(self.y[item])
 class ImageImporter:

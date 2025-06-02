@@ -243,6 +243,8 @@ def get_perfs(perforation_mode, n_conv):
         raise NotImplementedError()
     elif perforation_mode == "random":  # avg_proc 0.37 of non-perf
         perfs = np.random.randint(1, 3 + 1, (n_conv, 2))
+    elif perforation_mode == "warmup":  # avg_proc 0.37 of non-perf
+        perfs = np.random.randint(1, 3 + 1, (n_conv, 2))
     elif perforation_mode == "2by2_equivalent":
         perfs = np.ones((n_conv, 2), dtype=int)
         rns = np.random.random(n_conv)
@@ -451,13 +453,12 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
         vary_perf = True
     else:
         vary_perf = None
-
     if eval_modes is None:
         if eval_modes_test is None:
             eval_modes_test = (None,)
             eval_modes = (None,)
         else:
-            eval_modes = tuple(eval_modes_test[0])
+            eval_modes = eval_modes_test[0],
     else:
         if eval_modes_test is None:
             eval_modes_test = eval_modes
@@ -519,6 +520,7 @@ def benchmark(net, op, scheduler=None, loss_function=torch.nn.CrossEntropyLoss()
             train_mode = net._get_perforation()
         if epoch > max_epochs * 0.8:
             eval_modes = eval_modes_test
+        print(eval_modes)
         for ind, mode in enumerate(eval_modes):
 
             print("\ntesting eval mode", mode)
@@ -587,7 +589,7 @@ def runAllTests():
     #from Architectures.cifarNet import CifarNet
     architectures = [
 
-        [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, ]],#256, 512
+        [[(UNetCustom, "unet_custom"), (UNet, "unet_agri"), ], ["agri"], [128, 256, 512]],#256, 512
 
         #(CifarNet, "cifnet")
         #[[(mobilenet_v3_small, "mobnetv3s"),(mobilenet_v2, "mobnetv2"), (resnet18, "resnet18"), ], ["cifar", "ucihar"],
@@ -630,7 +632,8 @@ def runAllTests():
                         batch_size = 4
 
                     alreadyNoPerf = False
-                    for perforation in ( 3, ):#None, 2,"random", "2by2_equivalent"
+                    saveEp = None
+                    for perforation in ("warmup", None, 2, 3, "random", "2by2_equivalent"):
                         perf = (perforation, perforation)
                         if perforation is None:
                             if alreadyNoPerf:
@@ -644,15 +647,21 @@ def runAllTests():
                                     continue
                                 else:
                                     perf_type = None
+                            if perforation == "warmup":
+                                if perf_type == "dau":
+                                    max_epochs = saveEp
+                                    continue
+                                else:
+                                    saveEp = max_epochs
+                                    max_epochs = 2
 
                             #print("DOING PERF TYPE OVERRIDE; REMOVE THIS")
                             #perf_type = "dau"
                             #perforation = 2
-                            #alreadyNoPerf = True
                             #perf = (perforation, perforation)
 
 
-                            prefix = "test"
+                            prefix = "all_agri_redo"
 
                             name = f"{modelname}_{dataset}_{img}_{perforation}_{perf_type}"
                             curr_file = f"{name}"
@@ -715,11 +724,14 @@ def runAllTests():
                             print("starting run:", curr_file)
                             cpuRun = False
                             overrideExisting = False
-                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt") or cpuRun:
-                                contin = cpuRunF(prefix, net, loss_fn, curr_file, overrideExisting, op, train_loader,
+                            if os.path.exists(f"./{prefix}/{curr_file}_best.txt"):
+                                if cpuRun:
+                                    contin = cpuRunF(prefix, net, loss_fn, curr_file, overrideExisting, op, train_loader,
                                                  valid_loader, test_loader, perf, run_name, perforation, eval_modes,
                                                  in_size, dataset, perf_type, cpuRun)
-                                if contin == 0:
+                                    if contin == 0:
+                                        continue
+                                else:
                                     continue
                             print("net:", modelname)
                             print("Dataset:", dataset)
@@ -738,7 +750,7 @@ def runAllTests():
                                                             run_name=run_name, batch_size=batch_size, savemodels=True,
                                                             loss_function=loss_fn,prefix=prefix,do_grad=True,
                                                                      eval_modes=[perf] if (type(
-                                                                         perforation) == int or perforation is None) else None,
+                                                                         perforation) == int) else None,
                                                                      eval_modes_test=eval_modes, in_size=in_size, dataset=dataset,
                                                             perforation_type=perf_type, file=f, summarise=False)
 
