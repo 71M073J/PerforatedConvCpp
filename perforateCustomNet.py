@@ -380,6 +380,7 @@ def perforate_net_perfconv(net, from_class=torch.nn.Conv2d, perforation_mode=(2,
     add_functs(net)
     print(net.in_size)
     net._reset()
+    return net
 
 
 def perforate_net_downActivUp(net, in_size=None, from_class=torch.nn.Conv2d, perforation_mode=(2, 2), pretrained=True,
@@ -397,6 +398,7 @@ def perforate_net_downActivUp(net, in_size=None, from_class=torch.nn.Conv2d, per
     add_functs(net)
     #print(net.in_size)
     net._reset()
+    return net
 
 class layerWrapper(torch.nn.Module):
     def __init__(self, layer):
